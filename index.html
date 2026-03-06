@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exam AI — Randomized Past-Paper Generator</title>
+
+  <!-- PDF.js (ESM build via CDN) -->
+  <script>
+    // Configure PDF.js worker before loading the library
+    window.pdfjsWorkerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.mjs";
+  </script>
+  <script type="module">
+    import * as pdfjsLib from
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.min.mjs";
+    pdfjsLib.GlobalWorkerOptions.workerSrc = window.pdfjsWorkerSrc;
+    window.pdfjsLib = pdfjsLib;
+  </script>
+
+  <!-- App (ES modules) — deferred so PDF.js module runs first -->
+  <script type="module" src="./app.js"></script>
+
+  <style>
+    /* ── Reset & base ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; }
+
+    :root {
+      --color-bg: #f5f7fa;
+      --color-surface: #ffffff;
+      --color-border: #d0d7de;
+      --color-primary: #1a6bbf;
+      --color-primary-hover: #155a9e;
+      --color-success: #176f2c;
+      --color-success-bg: #dafbe1;
+      --color-warn: #7d4e17;
+      --color-warn-bg: #fff8c5;
+      --color-error: #82071e;
+      --color-error-bg: #ffebe9;
+      --color-info-bg: #e8f4fd;
+      --color-text: #1f2328;
+      --color-muted: #57606a;
+      --radius: 8px;
+      --shadow: 0 1px 3px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.08);
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        Helvetica, Arial, sans-serif;
+      background: var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.5;
+    }
+
+    /* ── Layout ───────────────────────────────────────────── */
+    .page-header {
+      background: var(--color-primary);
+      color: #fff;
+      padding: 1.25rem 2rem;
+      box-shadow: var(--shadow);
+    }
+    .page-header h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    .page-header p {
+      margin: 0.25rem 0 0;
+      opacity: 0.85;
+      font-size: 0.9rem;
+    }
+
+    main {
+      max-width: 900px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+
+    /* ── Card / section ───────────────────────────────────── */
+    .card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-bottom: 1.25rem;
+      box-shadow: var(--shadow);
+    }
+
+    .card h2 {
+      margin: 0 0 1rem;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--color-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .step-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.5rem;
+      height: 1.5rem;
+      background: var(--color-primary);
+      color: #fff;
+      border-radius: 50%;
+      font-size: 0.75rem;
+      font-weight: 700;
+      margin-right: 0.5rem;
+      vertical-align: middle;
+    }
+
+    /* ── Form controls ────────────────────────────────────── */
+    label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 0.3rem;
+      font-size: 0.9rem;
+    }
+
+    select, input[type="number"], input[type="text"] {
+      display: block;
+      width: 100%;
+      max-width: 360px;
+      padding: 0.45rem 0.75rem;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      font-size: 0.95rem;
+      background: #fff;
+      color: var(--color-text);
+      transition: border-color 0.15s;
+      appearance: auto;
+    }
+
+    select:focus, input:focus {
+      outline: none;
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px rgba(26,107,191,0.15);
+    }
+
+    /* ── Buttons ──────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.5rem 1.1rem;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--color-primary);
+      color: #fff;
+    }
+    .btn-primary:not(:disabled):hover {
+      background: var(--color-primary-hover);
+    }
+
+    .btn-secondary {
+      background: var(--color-bg);
+      color: var(--color-text);
+      border: 1px solid var(--color-border);
+    }
+    .btn-secondary:not(:disabled):hover {
+      background: var(--color-border);
+    }
+
+    .btn-success {
+      background: #176f2c;
+      color: #fff;
+    }
+    .btn-success:not(:disabled):hover {
+      background: #125824;
+    }
+
+    /* ── Status messages ──────────────────────────────────── */
+    .status {
+      margin-top: 0.75rem;
+      padding: 0.5rem 0.85rem;
+      border-radius: 6px;
+      font-size: 0.875rem;
+    }
+    .status[hidden] { display: none; }
+    .status--info    { background: var(--color-info-bg);    color: var(--color-primary); }
+    .status--success { background: var(--color-success-bg); color: var(--color-success); }
+    .status--warn    { background: var(--color-warn-bg);    color: var(--color-warn);    }
+    .status--error   { background: var(--color-error-bg);   color: var(--color-error);   }
+
+    /* ── Inline form rows ─────────────────────────────────── */
+    .form-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: flex-end;
+    }
+    .form-row > * { flex: 1; min-width: 160px; max-width: 360px; }
+    .form-row > .btn { flex: 0; min-width: auto; }
+
+    /* ── Radio group ──────────────────────────────────────── */
+    .radio-group {
+      display: flex;
+      gap: 1.25rem;
+      flex-wrap: wrap;
+      margin: 0.5rem 0;
+    }
+    .radio-group label {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-weight: 400;
+      cursor: pointer;
+    }
+    .radio-group input[type="radio"] { cursor: pointer; }
+
+    /* ── Topic checkboxes ─────────────────────────────────── */
+    #topic-checkboxes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1.25rem;
+      margin-top: 0.6rem;
+    }
+    .topic-label {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-weight: 400;
+      font-size: 0.875rem;
+      cursor: pointer;
+    }
+    .topic-cb { cursor: pointer; }
+
+    /* ── Paper output ─────────────────────────────────────── */
+    .paper-header {
+      margin-bottom: 1rem;
+    }
+    .paper-header h2 {
+      margin: 0 0 0.25rem;
+      font-size: 1.25rem;
+      color: var(--color-text);
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .paper-meta {
+      margin: 0;
+      font-size: 0.875rem;
+      color: var(--color-muted);
+    }
+
+    .question-card {
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      margin-bottom: 1.25rem;
+      overflow: hidden;
+    }
+
+    .question-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.5rem 0.85rem;
+      background: var(--color-bg);
+      border-bottom: 1px solid var(--color-border);
+      flex-wrap: wrap;
+    }
+
+    .question-number {
+      font-weight: 700;
+      font-size: 0.875rem;
+      color: var(--color-primary);
+    }
+
+    .topic-badge {
+      background: #e6f0fb;
+      color: var(--color-primary);
+      border-radius: 4px;
+      padding: 0.1rem 0.45rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+
+    .question-source {
+      margin-left: auto;
+      font-size: 0.75rem;
+      color: var(--color-muted);
+      font-style: italic;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 200px;
+    }
+
+    .question-text {
+      margin: 0;
+      padding: 0.85rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: inherit;
+      font-size: 0.9rem;
+      line-height: 1.7;
+    }
+
+    /* ── Divider between sections ─────────────────────────── */
+    .section-connector {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0.25rem 0 0.25rem 0.75rem;
+      color: var(--color-muted);
+      font-size: 0.8rem;
+    }
+    .section-connector::before {
+      content: "";
+      display: block;
+      width: 2px;
+      height: 20px;
+      background: var(--color-border);
+      border-radius: 2px;
+    }
+
+    /* ── Footer ───────────────────────────────────────────── */
+    footer {
+      text-align: center;
+      padding: 2rem 1rem;
+      color: var(--color-muted);
+      font-size: 0.8rem;
+    }
+
+    /* ── Responsive ───────────────────────────────────────── */
+    @media (max-width: 600px) {
+      main { margin: 1rem auto; }
+      .card { padding: 1rem; }
+      .form-row { flex-direction: column; }
+      .question-source { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<header class="page-header">
+  <h1>🎓 Exam AI</h1>
+  <p>Randomized past-paper generator — fully client-side, no uploads needed.</p>
+</header>
+
+<main>
+
+  <!-- ── Step 1: Level ──────────────────────────────────────── -->
+  <section class="card" id="level-section">
+    <h2><span class="step-badge">1</span> Select Level</h2>
+    <div>
+      <label for="level-select">Qualification level</label>
+      <select id="level-select">
+        <option value="">— choose level —</option>
+        <option value="o-level">O Level (IGCSE / O Level)</option>
+        <option value="a-level">A Level (AS &amp; A Level)</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- ── Step 2: Subject ────────────────────────────────────── -->
+  <section class="card" id="subject-section" hidden>
+    <h2><span class="step-badge">2</span> Select Subject</h2>
+    <div>
+      <label for="subject-select">Subject</label>
+      <select id="subject-select">
+        <option value="">— choose subject —</option>
+        <option value="maths">Mathematics</option>
+        <option value="physics">Physics</option>
+        <option value="computer-science">Computer Science</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- ── Step 3: Scan ───────────────────────────────────────── -->
+  <section class="card" id="scan-section" hidden>
+    <h2><span class="step-badge">3</span> Scan PDF Library</h2>
+    <p style="margin:0 0 0.75rem; font-size:0.875rem; color:var(--color-muted);">
+      Reads the first page of each bundled PDF and filters to those matching
+      your chosen subject using keyword detection.
+    </p>
+    <button class="btn btn-primary" id="scan-btn"
+            data-loading-text="Scanning…">
+      🔍 Scan PDFs
+    </button>
+    <div id="scan-status" class="status status--info" hidden></div>
+  </section>
+
+  <!-- ── Step 4: Build Index ────────────────────────────────── -->
+  <section class="card" id="index-section" hidden>
+    <h2><span class="step-badge">4</span> Build Question Index</h2>
+    <p style="margin:0 0 0.75rem; font-size:0.875rem; color:var(--color-muted);">
+      Extracts and indexes all questions from the matched PDFs.
+      This may take a moment for large papers.
+    </p>
+    <button class="btn btn-primary" id="build-index-btn"
+            data-loading-text="Indexing…">
+      📖 Build Index
+    </button>
+    <div id="index-status" class="status status--info" hidden></div>
+  </section>
+
+  <!-- ── Step 5 + 6: Generate ───────────────────────────────── -->
+  <section class="card" id="generate-section" hidden>
+    <h2><span class="step-badge">5</span> Configure &amp; Generate</h2>
+
+    <div style="margin-bottom:1rem;">
+      <p style="margin:0 0 0.4rem; font-weight:500; font-size:0.9rem;">Mode</p>
+      <div class="radio-group">
+        <label>
+          <input type="radio" name="mode" value="mixed" checked />
+          Mixed topics (all)
+        </label>
+        <label>
+          <input type="radio" name="mode" value="selected" />
+          Selected topics
+        </label>
+      </div>
+    </div>
+
+    <!-- Topic selector (shown only in "selected" mode) -->
+    <div id="topic-selection" hidden style="margin-bottom:1rem;">
+      <p style="margin:0 0 0.25rem; font-weight:500; font-size:0.9rem;">Topics</p>
+      <div id="topic-checkboxes"></div>
+    </div>
+
+    <div class="form-row" style="margin-bottom:1rem;">
+      <div>
+        <label for="question-count">Number of questions</label>
+        <input type="number" id="question-count" min="1" max="200" value="10" />
+      </div>
+      <div>
+        <label for="seed-input">Seed <span style="font-weight:400;color:var(--color-muted)">(optional — for reproducible shuffle)</span></label>
+        <input type="text" id="seed-input" placeholder="e.g. 42" />
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="generate-btn">
+      ⚡ Generate Paper
+    </button>
+
+    <div id="generate-status" class="status status--info" hidden></div>
+  </section>
+
+  <!-- ── Step 7: Paper output ───────────────────────────────── -->
+  <section class="card" id="paper-section" hidden>
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem; margin-bottom:1rem;">
+      <h2 style="margin:0"><span class="step-badge">6</span> Generated Paper</h2>
+      <button class="btn btn-success" id="download-btn">
+        ⬇ Download JSON
+      </button>
+    </div>
+    <div id="paper-container"></div>
+  </section>
+
+</main>
+
+<footer>
+  Exam AI &mdash; Static website. No server. No uploads.
+  PDFs stay on your device / CDN only.
+</footer>
+
+</body>
+</html>
