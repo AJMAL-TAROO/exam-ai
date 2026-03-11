@@ -83,6 +83,22 @@ const NOISE_PATTERNS = [
   /^\s*if\s+you\s+have\s+been\s+given\s+an?\s+answer\s+booklet/i,
   /^\s*for\s+examiner\s*['']?\s*s?\s*use\s*$/i,
   /^\s*do\s+not\s+write\s+(in|outside)\s+the\s+margin/i,
+  // Cover-page duration line (e.g. "1 hour 30 minutes", "2 hours", "45 minutes").
+  // This is the primary root cause: "1 hour 30 minutes" matches QUESTION_START_RE
+  // because it starts with "1 ", creating a false Question 1 that swallows all
+  // front-page instructions until the real Question 2 start is found.
+  /^\s*\d+\s+hours?(?:\s+\d+\s+minutes?)?\s*$/i,
+  /^\s*\d+\s+minutes?\s*$/i,
+  // Front-page boilerplate (will not appear inside actual question text)
+  /^\s*you\s+must\s+answer\s+on\s+the\s+question\s+paper/i,
+  /^\s*no\s+additional\s+materials?\s+are\s+needed/i,
+  // "INSTRUCTIONS" section heading (distinct from "Read these instructions first")
+  /^\s*instructions\s*$/i,
+  // Document page-count footer (e.g. "This document has 16 pages. Any blank pages are indicated.")
+  /^\s*this\s+(document|paper)\s+has\s+\d+\s+pages?/i,
+  /^\s*any\s+blank\s+pages?\s+are\s+indicated/i,
+  // Cambridge internal document codes (e.g. "DC (DE/FC) 318301/3")
+  /^\s*DC\s+\([^)]+\)\s+\d+\/\d+\s*$/i,
 ];
 
 /**
