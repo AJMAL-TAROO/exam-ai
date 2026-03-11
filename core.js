@@ -132,14 +132,20 @@ export function cleanPageText(pageText) {
  *   "1."          — number with trailing period, alone on a line
  *   "1 text…"     — number followed by question text on the same line
  *   "1. text…"    — number + period + text
+ *   "1 (a) …"     — number + sub-part marker on same line (very common in Cambridge papers)
  *   "Q1 …"        — Q-prefix variants
  *   "Question 1"  — full word prefix
  *
  * This is a broad first pass.  False positives are removed by
  * isQuestionFalsePositive() below.
+ *
+ * NOTE: The negative lookahead only excludes a bare digit following the
+ * question number (e.g. "3 5 marks"), NOT a parenthesis.  Excluding "("
+ * was the original bug: Cambridge questions often start "3 (a) …" where
+ * the sub-part marker sits on the same line as the question number.
  */
 const QUESTION_CANDIDATE_RE =
-  /^(?:Question\s+|Q\.?\s*)?(\d{1,2})(?:\s*\.?\s*$|(?:\.\s+|\s+)(?!\s*[\(\d]))/im;
+  /^(?:Question\s+|Q\.?\s*)?(\d{1,2})(?:\s*\.?\s*$|(?:\.\s+|\s+)(?!\s*\d))/im;
 
 /**
  * Patterns that identify a candidate line as a false positive — i.e. it is NOT
@@ -156,6 +162,7 @@ const FALSE_POSITIVE_PATTERNS = [
   /^\d+\s+(?:cm|mm|km)\b/i,           // length units
   /^\d+\s+(?:kg|mg|g)\b/i,            // mass units
   /^\d+\s*[×÷+\-=*]/,                 // mathematical operators
+  /^\d+\s*\(\s*\d/,                   // number followed by parenthesised digit e.g. "3 (2)"
 ];
 
 /**
