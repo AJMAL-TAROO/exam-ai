@@ -7,6 +7,6 @@
   "a-level": {
     "maths": [],
     "physics": [],
-    "computer-science": [assets/a-level/computer-science/9618_w23_qp_12.pdf]
+    "computer-science": ["assets/a-level/computer-science/9618_w23_qp_12.pdf"]
   }
 }
