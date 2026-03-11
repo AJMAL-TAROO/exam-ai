@@ -125,24 +125,70 @@ export function cleanPageText(pageText) {
 // ─── Question splitting ───────────────────────────────────────────────────────
 
 /**
- * Regex for a main question start.
- * Matches:
- *   "1 "  "Q1 "  "Q 1 "  "Question 1 "  "Question 1."
- * Does NOT match sub-parts like "(a)", "(i)", "1.a", "1(a)"
+ * Regex for a *candidate* question-start line.
+ *
+ * Accepted forms:
+ *   "1"           — number alone on a line (Cambridge style: number above question body)
+ *   "1."          — number with trailing period, alone on a line
+ *   "1 text…"     — number followed by question text on the same line
+ *   "1. text…"    — number + period + text
+ *   "Q1 …"        — Q-prefix variants
+ *   "Question 1"  — full word prefix
+ *
+ * This is a broad first pass.  False positives are removed by
+ * isQuestionFalsePositive() below.
  */
-const QUESTION_START_RE =
-  /^(?:Question\s+|Q\.?\s*)?(\d{1,2})(?:\s+|\.\s+)(?!\s*\()/im;
+const QUESTION_CANDIDATE_RE =
+  /^(?:Question\s+|Q\.?\s*)?(\d{1,2})(?:\s*\.?\s*$|(?:\.\s+|\s+)(?!\s*[\(\d]))/im;
+
+/**
+ * Patterns that identify a candidate line as a false positive — i.e. it is NOT
+ * really the start of a new question even though it begins with a number.
+ *
+ * Common occurrences in Cambridge exam papers:
+ *   "2 marks"  "3 mark"  — mark allocations
+ *   "3 cm"  "2 mm"  "5 km" — length measurements
+ *   "2 kg"  "4 mg"  "3 g"  — mass measurements
+ *   "2 × 10³"  "3 + x"     — inline mathematics
+ */
+const FALSE_POSITIVE_PATTERNS = [
+  /^\d+\s+marks?\b/i,                  // mark allocations
+  /^\d+\s+(?:cm|mm|km)\b/i,           // length units
+  /^\d+\s+(?:kg|mg|g)\b/i,            // mass units
+  /^\d+\s*[×÷+\-=*]/,                 // mathematical operators
+];
+
+/**
+ * Return true when a candidate line (already matched by QUESTION_CANDIDATE_RE)
+ * should be rejected as a false positive.
+ * @param {string} line
+ * @returns {boolean}
+ */
+function isQuestionFalsePositive(line) {
+  return FALSE_POSITIVE_PATTERNS.some((re) => re.test(line));
+}
+
+/**
+ * Minimum number of non-empty content lines a question must contain before the
+ * next question header is accepted as genuine.  Cambridge questions are never
+ * just a single line, so anything detected sooner is almost certainly a
+ * false positive (e.g. a mark-allocation number, a table cell, etc.).
+ */
+const MIN_LINES_PER_QUESTION = 2;
 
 /**
  * Split full-document text into individual main questions.
  *
  * Strategy:
  *  1. Join all pages into one string.
- *  2. Find every match of QUESTION_START_RE.
- *  3. Slice between consecutive matches.
- *  4. Require monotonically increasing question numbers to filter false positives.
+ *  2. Find every line matching QUESTION_START_RE.
+ *  3. Accept only strictly-monotonically-increasing question numbers (1, 2, 3 …)
+ *     within the range 1-40, AND only when the previous question already contains
+ *     at least MIN_LINES_PER_QUESTION non-empty lines (guards against a false
+ *     positive appearing on the very first or second line of a real question).
+ *  4. Slice between consecutive accepted starts.
  *
- * @param {string[]} pageTexts — cleaned text per page
+ * @param {string[]} pageTexts — raw text per page (cleaning is applied here)
  * @returns {{ number: number, text: string }[]}
  */
 export function splitIntoQuestions(pageTexts) {
@@ -152,13 +198,23 @@ export function splitIntoQuestions(pageTexts) {
   const questionStarts = []; // { index: lineIndex, number: qNum }
 
   for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(QUESTION_START_RE);
+    const m = lines[i].match(QUESTION_CANDIDATE_RE);
     if (!m) continue;
+    if (isQuestionFalsePositive(lines[i])) continue;
     const num = parseInt(m[1], 10);
-    // Enforce strictly monotonically increasing (1, 2, 3 …) in sane range (1-40)
     const prev = questionStarts[questionStarts.length - 1];
+    // Must be in sane range and strictly one more than the previous question.
     if (num < 1 || num > 40) continue;
     if (prev && num !== prev.number + 1) continue;
+    // Reject if the previous question body has fewer than MIN_LINES_PER_QUESTION
+    // non-empty lines — this filters out false positives that sit immediately
+    // after a real question header (e.g. "2 marks" on line 2 of Q1).
+    if (prev) {
+      const bodyLines = lines
+        .slice(prev.index + 1, i)
+        .filter((l) => l.trim().length > 0);
+      if (bodyLines.length < MIN_LINES_PER_QUESTION) continue;
+    }
     questionStarts.push({ index: i, number: num });
   }
 
