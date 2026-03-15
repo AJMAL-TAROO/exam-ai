@@ -324,12 +324,64 @@ function renderPaper(paper, seed) {
     const ep = q.endPage   ?? sp;
     const pageLabel = ep > sp ? `pp. ${sp}–${ep}` : `p. ${sp}`;
 
+    // Build AI debug rows for topic scores
+    const debug = q.debugInfo || {};
+    const matchedLine = debug.matchedLine ?? "";
+    const topicScores = debug.topicScores ?? [];
+
+    const topicScoreRows = topicScores
+      .filter((ts) => ts.score > 0)
+      .map(
+        (ts) =>
+          `<tr>
+            <td class="ai-debug-topic">${escapeHtml(ts.label)}</td>
+            <td class="ai-debug-score">${ts.score}</td>
+            <td class="ai-debug-kw">${ts.matchedKeywords.map(escapeHtml).join(", ")}</td>
+          </tr>`
+      )
+      .join("");
+
     div.innerHTML = `
       <div class="question-header">
         <span class="question-number">Q${i + 1}</span>
         <span class="question-topics">${topicBadges}</span>
         <span class="question-source" title="${q.pdfUrl}">${q.pdfUrl.split("/").pop()} — ${pageLabel}</span>
       </div>
+      <details class="ai-debug-details">
+        <summary class="ai-debug-summary">🤖 AI analysis</summary>
+        <div class="ai-debug-body">
+          <div class="ai-debug-row">
+            <span class="ai-debug-label">Source PDF</span>
+            <span class="ai-debug-value">${escapeHtml(q.pdfUrl.split("/").pop())}</span>
+          </div>
+          <div class="ai-debug-row">
+            <span class="ai-debug-label">Original question #</span>
+            <span class="ai-debug-value">${q.number}</span>
+          </div>
+          <div class="ai-debug-row">
+            <span class="ai-debug-label">Page range</span>
+            <span class="ai-debug-value">${pageLabel}</span>
+          </div>
+          <div class="ai-debug-row">
+            <span class="ai-debug-label">Detected start line</span>
+            <code class="ai-debug-value ai-debug-code">${escapeHtml(matchedLine)}</code>
+          </div>
+          ${
+            topicScoreRows
+              ? `<div class="ai-debug-row ai-debug-row--table">
+                  <span class="ai-debug-label">Topic scores</span>
+                  <table class="ai-debug-table">
+                    <thead><tr><th>Topic</th><th>Score</th><th>Matched keywords</th></tr></thead>
+                    <tbody>${topicScoreRows}</tbody>
+                  </table>
+                </div>`
+              : `<div class="ai-debug-row">
+                  <span class="ai-debug-label">Topic scores</span>
+                  <span class="ai-debug-value ai-debug-muted">No keywords matched — tagged as unclassified</span>
+                </div>`
+          }
+        </div>
+      </details>
       <div class="question-pages-section">
         <div class="question-pages-container"></div>
       </div>
@@ -386,11 +438,10 @@ const PDF_HEADER_MASK_PX = 60;
  * Pixels to mask at the bottom of each rendered page (covers page numbers,
  * "Turn over" arrows, and © UCLES copyright notices in the footer).
  *
- * Cambridge footers can stack three or more lines (page number, "Turn over"
- * with arrow, and the © UCLES copyright notice), reaching ~90–100 PDF points.
- * 140 px at scale 1.5 ensures all footer content is reliably erased.
+ * Reduced from 140 to 80 px to avoid cutting off question content that
+ * appears near the bottom of a page.
  */
-const PDF_FOOTER_MASK_PX = 140;
+const PDF_FOOTER_MASK_PX = 80;
 
 /**
  * Fill colour used for the header/footer mask rectangles.
