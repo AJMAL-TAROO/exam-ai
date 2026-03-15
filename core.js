@@ -22,6 +22,10 @@ export async function loadPdf(url) {
  * Reconstruct page text by grouping text items by y-coordinate,
  * sorting groups top→bottom, items within group left→right.
  *
+ * Inter-item gaps are measured in PDF user-space units and converted to an
+ * approximate number of space characters so that table columns remain visually
+ * aligned when the text is displayed in a monospaced context.
+ *
  * @param {PDFPageProxy} page
  * @returns {Promise<string>}
  */
@@ -38,13 +42,30 @@ export async function extractPageText(page) {
   // Sort rows top→bottom (higher y = higher on page in PDF coords)
   const sortedRows = [...rows.entries()].sort((a, b) => b[0] - a[0]);
   return sortedRows
-    .map(([, items]) =>
-      items
-        .sort((a, b) => a.transform[4] - b.transform[4])
-        .map((i) => i.str)
-        .join(" ")
-        .trim()
-    )
+    .map(([, items]) => {
+      const sorted = items.sort((a, b) => a.transform[4] - b.transform[4]);
+      if (sorted.length === 1) return sorted[0].str.trim();
+
+      // Reconstruct the row preserving inter-column spacing.
+      // For each adjacent pair of items we measure the pixel gap between the
+      // end of the previous item and the start of the next, then convert it to
+      // a number of space characters proportional to the average character
+      // width.  This keeps table columns legible in the extracted text.
+      let line = sorted[0].str;
+      for (let i = 1; i < sorted.length; i++) {
+        const prev = sorted[i - 1];
+        const cur  = sorted[i];
+        const itemWidth = prev.width > 0 ? prev.width : 0;
+        const gapPx     = cur.transform[4] - (prev.transform[4] + itemWidth);
+        const charWidth  = prev.str.length > 0
+          ? (prev.width > 0 ? prev.width : DEFAULT_CHAR_WIDTH) / prev.str.length
+          : DEFAULT_CHAR_WIDTH;
+        // Map pixel gap to space count; clamp to MIN_GAP_SPACES–MAX_GAP_SPACES.
+        const spaces = Math.min(MAX_GAP_SPACES, Math.max(MIN_GAP_SPACES, Math.round(gapPx / charWidth)));
+        line += " ".repeat(spaces) + cur.str;
+      }
+      return line.trim();
+    })
     .filter(Boolean)
     .join("\n");
 }
@@ -64,6 +85,15 @@ export async function extractAllPagesText(pdfDoc) {
 }
 
 // ─── Header / footer cleaning ─────────────────────────────────────────────────
+
+/** Fallback character width (PDF user-space units) when an item has no width. */
+const DEFAULT_CHAR_WIDTH = 8;
+
+/** Minimum number of spaces inserted to represent an inter-item gap. */
+const MIN_GAP_SPACES = 1;
+
+/** Maximum number of spaces inserted to represent an inter-item gap. */
+const MAX_GAP_SPACES = 16;
 
 /**
  * Lines that are typically headers or footers in Cambridge exam papers.
@@ -187,7 +217,8 @@ const MIN_LINES_PER_QUESTION = 2;
  * Split full-document text into individual main questions.
  *
  * Strategy:
- *  1. Join all pages into one string.
+ *  1. Flatten all pages into a single line array, recording which PDF page
+ *     (1-based) each line came from so we can report startPage / endPage.
  *  2. Find every line matching QUESTION_START_RE.
  *  3. Accept only strictly-monotonically-increasing question numbers (1, 2, 3 …)
  *     within the range 1-40, AND only when the previous question already contains
@@ -196,11 +227,21 @@ const MIN_LINES_PER_QUESTION = 2;
  *  4. Slice between consecutive accepted starts.
  *
  * @param {string[]} pageTexts — raw text per page (cleaning is applied here)
- * @returns {{ number: number, text: string }[]}
+ * @returns {{ number: number, text: string, startPage: number, endPage: number }[]}
  */
 export function splitIntoQuestions(pageTexts) {
-  const fullText = pageTexts.map(cleanPageText).join("\n");
-  const lines = fullText.split("\n");
+  // Build a flat line array and a parallel array mapping each line to its
+  // 1-based source page number.
+  const lines       = [];
+  const linePageMap = []; // linePageMap[i] = 1-based page number
+
+  for (let p = 0; p < pageTexts.length; p++) {
+    const pageLines = cleanPageText(pageTexts[p]).split("\n");
+    for (const line of pageLines) {
+      lines.push(line);
+      linePageMap.push(p + 1);
+    }
+  }
 
   const questionStarts = []; // { index: lineIndex, number: qNum }
 
@@ -233,7 +274,13 @@ export function splitIntoQuestions(pageTexts) {
       i + 1 < questionStarts.length ? questionStarts[i + 1].index : lines.length;
     const text = lines.slice(start, end).join("\n").trim();
     if (text.length > 10) {
-      questions.push({ number: questionStarts[i].number, text });
+      questions.push({
+        number: questionStarts[i].number,
+        text,
+        startPage: linePageMap[start] ?? 1,
+        // `end` is exclusive, so the last line of the question is at `end - 1`.
+        endPage:   linePageMap[end - 1] ?? linePageMap[start] ?? 1,
+      });
     }
   }
   return questions;
@@ -277,6 +324,8 @@ export function tagTopics(questionText, topics) {
  * @property {number} number
  * @property {string} text
  * @property {string[]} topics
+ * @property {number} startPage — 1-based page where the question begins
+ * @property {number} endPage   — 1-based page where the question ends (≥ startPage)
  */
 
 /**
@@ -302,6 +351,8 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
           number: q.number,
           text: q.text,
           topics: tagTopics(q.text, topics),
+          startPage: q.startPage,
+          endPage:   q.endPage,
         });
       }
     } catch (err) {

@@ -305,9 +305,45 @@
       padding: 0.85rem;
       white-space: pre-wrap;
       word-break: break-word;
-      font-family: inherit;
-      font-size: 0.9rem;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.875rem;
       line-height: 1.7;
+    }
+
+    /* ── PDF page image section ───────────────────────────── */
+    .question-pages-section {
+      border-top: 1px solid var(--color-border);
+      padding: 0.5rem 0.85rem 0.75rem;
+      background: var(--color-bg);
+    }
+
+    .page-toggle-btn {
+      font-size: 0.8rem;
+      padding: 0.3rem 0.75rem;
+    }
+
+    .question-pages-container {
+      margin-top: 0.6rem;
+    }
+    .question-pages-container[hidden] { display: none; }
+
+    .pdf-page-canvas {
+      display: block;
+      max-width: 100%;
+      margin-bottom: 0.5rem;
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      box-shadow: var(--shadow);
+    }
+
+    .page-loading {
+      font-size: 0.8rem;
+      color: var(--color-muted);
+    }
+
+    .page-error {
+      font-size: 0.8rem;
+      color: var(--color-error);
     }
 
     /* ── Divider between sections ─────────────────────────── */

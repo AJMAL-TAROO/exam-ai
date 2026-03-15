@@ -9,6 +9,7 @@ import {
   filterPdfsBySubjectLevel,
   buildIndex,
   generatePaper,
+  loadPdf,
 } from "./core.js";
 import { TOPICS_O } from "./subjects/topics-o.js";
 import { TOPICS_A } from "./subjects/topics-a.js";
@@ -281,6 +282,7 @@ function onGenerateClick() {
         index: i + 1,
         sourcePdf: q.pdfUrl,
         originalNumber: q.number,
+        pageRange: { startPage: q.startPage ?? 1, endPage: q.endPage ?? q.startPage ?? 1 },
         topics: q.topics,
         text: q.text,
       })),
@@ -317,6 +319,12 @@ function renderPaper(paper, seed) {
       .map((t) => `<span class="topic-badge">${t}</span>`)
       .join(" ");
 
+    // Page-range label used in the toggle button
+    const sp = q.startPage ?? 1;
+    const ep = q.endPage   ?? sp;
+    const pageLabel = ep > sp ? `pp. ${sp}–${ep}` : `p. ${sp}`;
+    const pageWord  = ep > sp ? "Pages" : "Page";
+
     div.innerHTML = `
       <div class="question-header">
         <span class="question-number">Q${i + 1}</span>
@@ -324,7 +332,33 @@ function renderPaper(paper, seed) {
         <span class="question-source" title="${q.pdfUrl}">${q.pdfUrl.split("/").pop()}</span>
       </div>
       <pre class="question-text">${escapeHtml(q.text)}</pre>
+      <div class="question-pages-section">
+        <button class="btn btn-secondary page-toggle-btn" type="button">
+          📄 View Source ${pageWord} (${pageLabel})
+        </button>
+        <div class="question-pages-container" hidden></div>
+      </div>
     `;
+
+    // Lazy-render: only fetch + draw pages when the user first expands the panel.
+    const toggleBtn      = div.querySelector(".page-toggle-btn");
+    const pagesContainer = div.querySelector(".question-pages-container");
+    let rendered = false;
+
+    toggleBtn.addEventListener("click", async () => {
+      if (pagesContainer.hidden) {
+        pagesContainer.hidden = false;
+        toggleBtn.textContent = `▲ Hide Source ${pageWord}`;
+        if (!rendered) {
+          rendered = true;
+          await renderPdfPages(pagesContainer, q.pdfUrl, sp, ep);
+        }
+      } else {
+        pagesContainer.hidden = true;
+        toggleBtn.textContent = `📄 View Source ${pageWord} (${pageLabel})`;
+      }
+    });
+
     container.appendChild(div);
   });
 }
@@ -335,6 +369,58 @@ function escapeHtml(str) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+// ─── PDF page rendering (for images & tables) ─────────────────────────────────
+
+/**
+ * Cache of already-loaded PDF documents keyed by URL.
+ * Avoids re-fetching the same file when the user toggles page views.
+ * @type {Map<string, Promise<PDFDocumentProxy>>}
+ */
+const pdfDocCache = new Map();
+
+/**
+ * Return a (possibly cached) PDF document promise.
+ * @param {string} url
+ * @returns {Promise<PDFDocumentProxy>}
+ */
+function getCachedPdfDoc(url) {
+  if (!pdfDocCache.has(url)) {
+    pdfDocCache.set(url, loadPdf(url));
+  }
+  return pdfDocCache.get(url);
+}
+
+/**
+ * Render one or more PDF pages as <canvas> elements inside `container`.
+ * Replaces any existing content with a loading indicator while working.
+ *
+ * @param {HTMLElement} container
+ * @param {string} pdfUrl
+ * @param {number} startPage — 1-based
+ * @param {number} endPage   — 1-based, inclusive
+ */
+async function renderPdfPages(container, pdfUrl, startPage, endPage) {
+  container.innerHTML =
+    `<span class="page-loading">Loading ${startPage === endPage ? "page" : "pages"}…</span>`;
+  try {
+    const pdfDoc = await getCachedPdfDoc(pdfUrl);
+    container.innerHTML = "";
+    for (let p = startPage; p <= endPage; p++) {
+      const page     = await pdfDoc.getPage(p);
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas   = document.createElement("canvas");
+      canvas.width   = viewport.width;
+      canvas.height  = viewport.height;
+      canvas.className = "pdf-page-canvas";
+      await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+      container.appendChild(canvas);
+    }
+  } catch (err) {
+    container.innerHTML =
+      `<span class="page-error">Could not render page: ${escapeHtml(err.message)}</span>`;
+  }
 }
 
 // ─── Step 8: Download JSON ────────────────────────────────────────────────────
