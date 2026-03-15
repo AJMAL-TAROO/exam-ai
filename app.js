@@ -375,14 +375,23 @@ function getCachedPdfDoc(url) {
 /**
  * Pixels to mask at the top of each rendered page (covers paper codes,
  * subject name, and session info in the Cambridge exam paper header).
+ *
+ * At the default render scale of 1.5, 1 PDF point ≈ 1.5 canvas pixels.
+ * Cambridge headers typically span ~80–100 PDF points (paper-code line +
+ * subject-name line + session/time line), so 120 px provides a comfortable
+ * safety margin while keeping question text visible.
  */
-const PDF_HEADER_MASK_PX = 60;
+const PDF_HEADER_MASK_PX = 120;
 
 /**
  * Pixels to mask at the bottom of each rendered page (covers page numbers,
  * "Turn over" arrows, and © UCLES copyright notices in the footer).
+ *
+ * Cambridge footers can stack three or more lines (page number, "Turn over"
+ * with arrow, and the © UCLES copyright notice), reaching ~90–100 PDF points.
+ * 140 px at scale 1.5 ensures all footer content is reliably erased.
  */
-const PDF_FOOTER_MASK_PX = 90;
+const PDF_FOOTER_MASK_PX = 140;
 
 /**
  * Fill colour used for the header/footer mask rectangles.
