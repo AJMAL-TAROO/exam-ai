@@ -319,45 +319,25 @@ function renderPaper(paper, seed) {
       .map((t) => `<span class="topic-badge">${t}</span>`)
       .join(" ");
 
-    // Page-range label used in the toggle button
+    // Page-range label shown in the question header source info
     const sp = q.startPage ?? 1;
     const ep = q.endPage   ?? sp;
     const pageLabel = ep > sp ? `pp. ${sp}–${ep}` : `p. ${sp}`;
-    const pageWord  = ep > sp ? "Pages" : "Page";
 
     div.innerHTML = `
       <div class="question-header">
         <span class="question-number">Q${i + 1}</span>
         <span class="question-topics">${topicBadges}</span>
-        <span class="question-source" title="${q.pdfUrl}">${q.pdfUrl.split("/").pop()}</span>
+        <span class="question-source" title="${q.pdfUrl}">${q.pdfUrl.split("/").pop()} — ${pageLabel}</span>
       </div>
-      <pre class="question-text">${escapeHtml(q.text)}</pre>
       <div class="question-pages-section">
-        <button class="btn btn-secondary page-toggle-btn" type="button">
-          📄 View Source ${pageWord} (${pageLabel})
-        </button>
-        <div class="question-pages-container" hidden></div>
+        <div class="question-pages-container"></div>
       </div>
     `;
 
-    // Lazy-render: only fetch + draw pages when the user first expands the panel.
-    const toggleBtn      = div.querySelector(".page-toggle-btn");
+    // Render pages immediately — no toggle needed; canvas is the primary view.
     const pagesContainer = div.querySelector(".question-pages-container");
-    let rendered = false;
-
-    toggleBtn.addEventListener("click", async () => {
-      if (pagesContainer.hidden) {
-        pagesContainer.hidden = false;
-        toggleBtn.textContent = `▲ Hide Source ${pageWord}`;
-        if (!rendered) {
-          rendered = true;
-          await renderPdfPages(pagesContainer, q.pdfUrl, sp, ep);
-        }
-      } else {
-        pagesContainer.hidden = true;
-        toggleBtn.textContent = `📄 View Source ${pageWord} (${pageLabel})`;
-      }
-    });
+    renderPdfPages(pagesContainer, q.pdfUrl, sp, ep);
 
     container.appendChild(div);
   });
@@ -393,6 +373,24 @@ function getCachedPdfDoc(url) {
 }
 
 /**
+ * Pixels to mask at the top of each rendered page (covers paper codes,
+ * subject name, and session info in the Cambridge exam paper header).
+ */
+const PDF_HEADER_MASK_PX = 60;
+
+/**
+ * Pixels to mask at the bottom of each rendered page (covers page numbers,
+ * "Turn over" arrows, and © UCLES copyright notices in the footer).
+ */
+const PDF_FOOTER_MASK_PX = 90;
+
+/**
+ * Fill colour used for the header/footer mask rectangles.
+ * Should match the page background so masked areas are invisible.
+ */
+const PDF_MASK_COLOR = "#ffffff";
+
+/**
  * Render one or more PDF pages as <canvas> elements inside `container`.
  * Replaces any existing content with a loading indicator while working.
  *
@@ -414,7 +412,15 @@ async function renderPdfPages(container, pdfUrl, startPage, endPage) {
       canvas.width   = viewport.width;
       canvas.height  = viewport.height;
       canvas.className = "pdf-page-canvas";
-      await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+      const ctx = canvas.getContext("2d");
+      await page.render({ canvasContext: ctx, viewport }).promise;
+
+      // Mask the top and bottom margins to remove page headers (paper codes,
+      // session info) and footers (page numbers, "Turn over", © UCLES notices).
+      ctx.fillStyle = PDF_MASK_COLOR;
+      ctx.fillRect(0, 0, canvas.width, PDF_HEADER_MASK_PX);
+      ctx.fillRect(0, canvas.height - PDF_FOOTER_MASK_PX, canvas.width, PDF_FOOTER_MASK_PX);
+
       container.appendChild(canvas);
     }
   } catch (err) {
