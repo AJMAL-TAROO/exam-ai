@@ -377,11 +377,10 @@ function getCachedPdfDoc(url) {
  * subject name, and session info in the Cambridge exam paper header).
  *
  * At the default render scale of 1.5, 1 PDF point ≈ 1.5 canvas pixels.
- * Cambridge headers typically span ~80–100 PDF points (paper-code line +
- * subject-name line + session/time line), so 120 px provides a comfortable
- * safety margin while keeping question text visible.
+ * Cambridge headers typically span ~40 PDF points, so 60 px is sufficient
+ * to hide the header while keeping question numbers and question text visible.
  */
-const PDF_HEADER_MASK_PX = 120;
+const PDF_HEADER_MASK_PX = 60;
 
 /**
  * Pixels to mask at the bottom of each rendered page (covers page numbers,
