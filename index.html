@@ -439,6 +439,36 @@
     .ai-debug-score { text-align: right; font-variant-numeric: tabular-nums; }
     .ai-debug-kw    { color: var(--color-muted); font-size: 0.75rem; }
 
+    /* Highlight the row of the assigned/winning topic in the scores table */
+    .ai-debug-assigned-row { background: #eaf4ff; font-weight: 600; }
+    .ai-debug-assigned-row .ai-debug-kw { color: var(--color-text); }
+
+    /* Inline keyword list shown under "Assigned topic" row */
+    .ai-debug-kw-inline {
+      font-style: italic;
+      color: var(--color-primary);
+    }
+
+    /* Sub-part label chips */
+    .ai-debug-subpart {
+      display: inline-block;
+      background: var(--color-info-bg);
+      border: 1px solid #b6daef;
+      border-radius: 4px;
+      padding: 0.05rem 0.35rem;
+      font-size: 0.75rem;
+      margin-right: 2px;
+    }
+
+    /* "Assigned topic" row – slightly highlighted */
+    .ai-debug-row--assigned {
+      background: #f0f8ff;
+      border-left: 3px solid var(--color-primary);
+      border-radius: 0 4px 4px 0;
+      padding-left: 0.5rem;
+      margin-left: -0.5rem;
+    }
+
     /* ── Footer ───────────────────────────────────────────── */
     footer {
       text-align: center;
