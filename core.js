@@ -277,6 +277,7 @@ export function splitIntoQuestions(pageTexts) {
       questions.push({
         number: questionStarts[i].number,
         text,
+        matchedLine: lines[start],
         startPage: linePageMap[start] ?? 1,
         // `end` is exclusive, so the last line of the question is at `end - 1`.
         endPage:   linePageMap[end - 1] ?? linePageMap[start] ?? 1,
@@ -316,7 +317,43 @@ export function tagTopics(questionText, topics) {
     .map((t) => t.id);
 }
 
+/**
+ * Like tagTopics but also returns full per-topic score details for debugging.
+ *
+ * @param {string} questionText
+ * @param {{ id: string, label: string, keywords: string[] }[]} topics
+ * @returns {TopicScore[]} all topics sorted by score (including zero-score ones)
+ */
+export function tagTopicsDebug(questionText, topics) {
+  const lower = questionText.toLowerCase();
+  return topics
+    .map((topic) => {
+      const matchedKeywords = topic.keywords.filter((kw) =>
+        lower.includes(kw.toLowerCase())
+      );
+      const score = matchedKeywords.reduce((s, kw) => {
+        return s + (kw.includes(" ") ? 3 : 1);
+      }, 0);
+      return { id: topic.id, label: topic.label, score, matchedKeywords };
+    })
+    .sort((a, b) => b.score - a.score);
+}
+
 // ─── Question index ───────────────────────────────────────────────────────────
+
+/**
+ * @typedef {Object} TopicScore
+ * @property {string} id
+ * @property {string} label
+ * @property {number} score
+ * @property {string[]} matchedKeywords
+ */
+
+/**
+ * @typedef {Object} QuestionDebugInfo
+ * @property {string} matchedLine  — the raw text line that triggered question detection
+ * @property {TopicScore[]} topicScores — all topics with their keyword scores
+ */
 
 /**
  * @typedef {Object} QuestionEntry
@@ -326,6 +363,7 @@ export function tagTopics(questionText, topics) {
  * @property {string[]} topics
  * @property {number} startPage — 1-based page where the question begins
  * @property {number} endPage   — 1-based page where the question ends (≥ startPage)
+ * @property {QuestionDebugInfo} debugInfo — AI analysis details for review
  */
 
 /**
@@ -353,6 +391,10 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
           topics: tagTopics(q.text, topics),
           startPage: q.startPage,
           endPage:   q.endPage,
+          debugInfo: {
+            matchedLine: q.matchedLine,
+            topicScores: tagTopicsDebug(q.text, topics),
+          },
         });
       }
     } catch (err) {
