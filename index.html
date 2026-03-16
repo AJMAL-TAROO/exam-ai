@@ -449,6 +449,37 @@
       color: var(--color-primary);
     }
 
+    /* Each keyword item (badge + keyword text) */
+    .ai-debug-kw-item {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 2px;
+      margin-right: 4px;
+    }
+
+    /* Location badge (main / sub) shown before each keyword */
+    .ai-debug-loc {
+      display: inline-block;
+      font-size: 0.65rem;
+      font-weight: 700;
+      font-style: normal;
+      padding: 0 3px;
+      border-radius: 3px;
+      vertical-align: middle;
+      cursor: help;        /* signals there is a tooltip (context line) */
+      white-space: nowrap;
+    }
+    .ai-debug-loc--main {
+      background: #dafbe1;
+      color: #176f2c;
+      border: 1px solid #9dd9ac;
+    }
+    .ai-debug-loc--sub {
+      background: #fff8c5;
+      color: #7d4e17;
+      border: 1px solid #e8c84a;
+    }
+
     /* Sub-part label chips */
     .ai-debug-subpart {
       display: inline-block;
