@@ -343,7 +343,7 @@ function renderPaper(paper, seed) {
           `<tr${ts.id === assignedTopicId ? ' class="ai-debug-assigned-row"' : ""}>
             <td class="ai-debug-topic">${escapeHtml(ts.label)}</td>
             <td class="ai-debug-score">${ts.score}</td>
-            <td class="ai-debug-kw">${ts.matchedKeywords.map(escapeHtml).join(", ")}</td>
+            <td class="ai-debug-kw">${ts.matchedKeywords.map(renderKeywordBadge).join(" ")}</td>
           </tr>`
       )
       .join("");
@@ -386,7 +386,7 @@ function renderPaper(paper, seed) {
             <span class="ai-debug-value">
               <strong>${escapeHtml(assignedLabel)}</strong>
               ${assignedKeywords.length > 0
-                ? `&mdash; triggered by: <span class="ai-debug-kw-inline">${assignedKeywords.map(escapeHtml).join(", ")}</span>`
+                ? `&mdash; triggered by: <span class="ai-debug-kw-inline">${assignedKeywords.map(renderKeywordBadge).join(" ")}</span>`
                 : `<span class="ai-debug-muted">(no keyword match — unclassified)</span>`}
             </span>
           </div>
@@ -425,6 +425,20 @@ function escapeHtml(str) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/**
+ * Render a single matched-keyword entry as an HTML badge showing the keyword,
+ * its location (main body or sub-part), and a tooltip with the context line.
+ *
+ * @param {{ kw: string, location: 'main'|'sub', context: string }} mk
+ * @returns {string} HTML string
+ */
+function renderKeywordBadge(mk) {
+  const locClass = mk.location === "main" ? "ai-debug-loc--main" : "ai-debug-loc--sub";
+  const locLabel = mk.location === "main" ? "main" : "sub";
+  const ctxAttr  = mk.context ? ` title="${escapeHtml(mk.context)}"` : "";
+  return `<span class="ai-debug-kw-item"><span class="ai-debug-loc ${locClass}"${ctxAttr}>${locLabel}</span> ${escapeHtml(mk.kw)}</span>`;
 }
 
 // ─── PDF page rendering (for images & tables) ─────────────────────────────────

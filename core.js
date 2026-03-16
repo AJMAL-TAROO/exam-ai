@@ -320,6 +320,25 @@ function extractSubParts(questionText) {
   return [...new Set(matches.map((m) => m[1].toLowerCase()))];
 }
 
+/**
+ * Return the first element of `lines` that contains `kwLower`
+ * (case-insensitive), truncated to 100 characters.
+ * Returns an empty string if not found.
+ *
+ * @param {string[]} lines — pre-split lines (original case)
+ * @param {string} kwLower — already lower-cased keyword
+ * @returns {string}
+ */
+function findContextLine(lines, kwLower) {
+  for (const line of lines) {
+    if (line.toLowerCase().includes(kwLower)) {
+      const t = line.trim();
+      return t.length > 100 ? t.slice(0, 100) + "…" : t;
+    }
+  }
+  return "";
+}
+
 /** Weight applied to multi-word keywords (more specific → higher signal). */
 const MULTI_WORD_WEIGHT = 3;
 
@@ -347,14 +366,19 @@ const MAIN_BODY_MULTIPLIER = 2;
  *
  * @param {string} questionText
  * @param {{ id: string, label: string, keywords: string[] }[]} topics
- * @returns {{ id: string, label: string, score: number, matchedKeywords: string[] }[]}
+ * @returns {TopicScore[]}
  */
 function scoreTopics(questionText, topics) {
   const splitIdx = findFirstSubPartIndex(questionText);
-  const mainText = (splitIdx >= 0 ? questionText.slice(0, splitIdx) : questionText).toLowerCase();
-  const subText  = (splitIdx >= 0 ? questionText.slice(splitIdx)    : "").toLowerCase();
+  const mainText     = (splitIdx >= 0 ? questionText.slice(0, splitIdx) : questionText).toLowerCase();
+  const subText      = (splitIdx >= 0 ? questionText.slice(splitIdx)    : "").toLowerCase();
+  // Pre-split the original-case text into lines once so findContextLine can
+  // iterate without re-splitting on every keyword lookup.
+  const mainLines = (splitIdx >= 0 ? questionText.slice(0, splitIdx) : questionText).split("\n");
+  const subLines  = (splitIdx >= 0 ? questionText.slice(splitIdx)    : "").split("\n");
 
   return topics.map((topic) => {
+    /** @type {MatchedKeyword[]} */
     const matchedKeywords = [];
     let score = 0;
 
@@ -367,10 +391,10 @@ function scoreTopics(questionText, topics) {
 
       if (inMain) {
         score += baseWeight * MAIN_BODY_MULTIPLIER;
-        matchedKeywords.push(kw);
+        matchedKeywords.push({ kw, location: "main", context: findContextLine(mainLines, kwLower) });
       } else if (inSub) {
         score += baseWeight;
-        matchedKeywords.push(kw);
+        matchedKeywords.push({ kw, location: "sub", context: findContextLine(subLines, kwLower) });
       }
     }
 
@@ -417,11 +441,18 @@ export function tagTopicsDebug(questionText, topics) {
 // ─── Question index ───────────────────────────────────────────────────────────
 
 /**
+ * @typedef {Object} MatchedKeyword
+ * @property {string} kw       — the keyword that matched
+ * @property {'main'|'sub'} location — whether found in the main question body or a sub-part
+ * @property {string} context — the (truncated) line of text where the keyword was found
+ */
+
+/**
  * @typedef {Object} TopicScore
  * @property {string} id
  * @property {string} label
  * @property {number} score
- * @property {string[]} matchedKeywords
+ * @property {MatchedKeyword[]} matchedKeywords
  */
 
 /**
@@ -452,14 +483,23 @@ export function tagTopicsDebug(questionText, topics) {
  */
 export async function buildIndex(pdfUrls, topics, onProgress) {
   const index = [];
-  for (let i = 0; i < pdfUrls.length; i++) {
-    const url = pdfUrls[i];
-    if (onProgress) onProgress(i, pdfUrls.length, url);
+  // Deduplicate URLs so the same PDF is never processed twice even if it
+  // appears more than once in the manifest or matched-URL list.
+  const uniqueUrls = [...new Set(pdfUrls)];
+  // Track (pdfUrl, questionNumber) pairs to skip duplicate question entries.
+  const seenKeys = new Set();
+
+  for (let i = 0; i < uniqueUrls.length; i++) {
+    const url = uniqueUrls[i];
+    if (onProgress) onProgress(i, uniqueUrls.length, url);
     try {
       const pdfDoc = await loadPdf(url);
       const rawPages = await extractAllPagesText(pdfDoc);
       const questions = splitIntoQuestions(rawPages);
       for (const q of questions) {
+        const key = `${url}||${q.number}`;
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
         const debugResult = tagTopicsDebug(q.text, topics);
         index.push({
           pdfUrl: url,
@@ -479,7 +519,7 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
       console.warn(`Failed to process ${url}:`, err);
     }
   }
-  if (onProgress) onProgress(pdfUrls.length, pdfUrls.length, "");
+  if (onProgress) onProgress(uniqueUrls.length, uniqueUrls.length, "");
   return index;
 }
 
@@ -537,6 +577,16 @@ export function generatePaper(index, { topics = null, count = 10, seed = null })
     pool = index.filter((q) => q.topics.some((t) => topics.includes(t)));
   }
 
+  // Deduplicate by (pdfUrl, question number) so no question ever appears twice
+  // in the generated paper, even if the index somehow contains duplicates.
+  const seen = new Set();
+  pool = pool.filter((q) => {
+    const key = `${q.pdfUrl}||${q.number}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
   if (pool.length === 0) return [];
 
   const effectiveSeed = seed !== null ? (seed >>> 0) : (Math.random() * 0x100000000) >>> 0;
@@ -570,11 +620,13 @@ export async function scanFirstPage(url) {
  * @returns {Promise<string[]>} URLs whose first page matches subject+level
  */
 export async function filterPdfsBySubjectLevel(urls, subject, level, onProgress) {
+  // Deduplicate URLs before scanning so the same PDF is never processed twice.
+  const uniqueUrls = [...new Set(urls)];
   const matched = [];
-  for (let i = 0; i < urls.length; i++) {
-    if (onProgress) onProgress(i, urls.length);
+  for (let i = 0; i < uniqueUrls.length; i++) {
+    if (onProgress) onProgress(i, uniqueUrls.length);
     try {
-      const text = await scanFirstPage(urls[i]);
+      const text = await scanFirstPage(uniqueUrls[i]);
       const detectedSubject = detectSubject(text);
       const detectedLevel = detectLevel(text);
       // Accept if subject matches; level may be null (ambiguous first page)
@@ -582,12 +634,12 @@ export async function filterPdfsBySubjectLevel(urls, subject, level, onProgress)
         detectedSubject === subject &&
         (detectedLevel === null || detectedLevel === level)
       ) {
-        matched.push(urls[i]);
+        matched.push(uniqueUrls[i]);
       }
     } catch (err) {
-      console.warn(`Scan failed for ${urls[i]}:`, err);
+      console.warn(`Scan failed for ${uniqueUrls[i]}:`, err);
     }
   }
-  if (onProgress) onProgress(urls.length, urls.length);
+  if (onProgress) onProgress(uniqueUrls.length, uniqueUrls.length);
   return matched;
 }
