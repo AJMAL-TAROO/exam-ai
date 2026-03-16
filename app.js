@@ -328,18 +328,29 @@ function renderPaper(paper, seed) {
     const debug = q.debugInfo || {};
     const matchedLine = debug.matchedLine ?? "";
     const topicScores = debug.topicScores ?? [];
+    const subParts    = debug.subParts    ?? [];
+
+    // The single assigned topic for this question
+    const assignedTopicId = q.topics[0] ?? "unclassified";
+    const assignedTopicScore = topicScores.find((ts) => ts.id === assignedTopicId);
+    const assignedLabel = assignedTopicScore?.label ?? assignedTopicId;
+    const assignedKeywords = assignedTopicScore?.matchedKeywords ?? [];
 
     const topicScoreRows = topicScores
       .filter((ts) => ts.score > 0)
       .map(
         (ts) =>
-          `<tr>
+          `<tr${ts.id === assignedTopicId ? ' class="ai-debug-assigned-row"' : ""}>
             <td class="ai-debug-topic">${escapeHtml(ts.label)}</td>
             <td class="ai-debug-score">${ts.score}</td>
             <td class="ai-debug-kw">${ts.matchedKeywords.map(escapeHtml).join(", ")}</td>
           </tr>`
       )
       .join("");
+
+    const subPartsHtml = subParts.length > 0
+      ? subParts.map((p) => `<code class="ai-debug-subpart">(${escapeHtml(p)})</code>`).join(" ")
+      : `<span class="ai-debug-muted">none detected</span>`;
 
     div.innerHTML = `
       <div class="question-header">
@@ -366,17 +377,30 @@ function renderPaper(paper, seed) {
             <span class="ai-debug-label">Detected start line</span>
             <code class="ai-debug-value ai-debug-code">${escapeHtml(matchedLine)}</code>
           </div>
+          <div class="ai-debug-row">
+            <span class="ai-debug-label">Sub-parts found</span>
+            <span class="ai-debug-value">${subPartsHtml}</span>
+          </div>
+          <div class="ai-debug-row ai-debug-row--assigned">
+            <span class="ai-debug-label">Assigned topic</span>
+            <span class="ai-debug-value">
+              <strong>${escapeHtml(assignedLabel)}</strong>
+              ${assignedKeywords.length > 0
+                ? `&mdash; triggered by: <span class="ai-debug-kw-inline">${assignedKeywords.map(escapeHtml).join(", ")}</span>`
+                : `<span class="ai-debug-muted">(no keyword match — unclassified)</span>`}
+            </span>
+          </div>
           ${
             topicScoreRows
               ? `<div class="ai-debug-row ai-debug-row--table">
-                  <span class="ai-debug-label">Topic scores</span>
+                  <span class="ai-debug-label">All topic scores</span>
                   <table class="ai-debug-table">
                     <thead><tr><th>Topic</th><th>Score</th><th>Matched keywords</th></tr></thead>
                     <tbody>${topicScoreRows}</tbody>
                   </table>
                 </div>`
               : `<div class="ai-debug-row">
-                  <span class="ai-debug-label">Topic scores</span>
+                  <span class="ai-debug-label">All topic scores</span>
                   <span class="ai-debug-value ai-debug-muted">No keywords matched — tagged as unclassified</span>
                 </div>`
           }

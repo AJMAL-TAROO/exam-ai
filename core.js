@@ -290,53 +290,128 @@ export function splitIntoQuestions(pageTexts) {
 // ─── Topic tagging ────────────────────────────────────────────────────────────
 
 /**
- * Tag a question with matching topics using keyword scoring.
+ * Find the character index of the first sub-part label in question text.
+ * Sub-part labels look like "(a)", "(b)", "(i)", "(ii)" etc. and appear at
+ * the start of a line (possibly indented).
+ * Returns -1 if no sub-part label is found.
  *
- * @param {string} questionText
- * @param {{ id: string, label: string, keywords: string[] }[]} topics
- * @returns {string[]} list of topic IDs that score above threshold
+ * @param {string} text
+ * @returns {number}
  */
-export function tagTopics(questionText, topics) {
-  const lower = questionText.toLowerCase();
-  const scored = topics
-    .map((topic) => {
-      const score = topic.keywords.reduce((s, kw) => {
-        const weight = kw.includes(" ") ? 3 : 1;
-        return s + (lower.includes(kw.toLowerCase()) ? weight : 0);
-      }, 0);
-      return { id: topic.id, score };
-    })
-    .filter((t) => t.score > 0)
-    .sort((a, b) => b.score - a.score);
-
-  // Return top-scoring topics (those within 50% of the best score)
-  if (scored.length === 0) return ["unclassified"];
-  const best = scored[0].score;
-  return scored
-    .filter((t) => t.score >= best * 0.5)
-    .map((t) => t.id);
+function findFirstSubPartIndex(text) {
+  // Match a line that begins (optionally with whitespace) with a sub-part label.
+  // We accept 1-3 letters (lower or upper-case) to cover (a)…(c) and (i)…(viii) etc.
+  const m = /(?:^|\n)[ \t]*\([a-zA-Z]{1,3}\)/.exec(text);
+  if (!m) return -1;
+  // If the match started at position 0 we keep the full string as "sub-part";
+  // otherwise skip the leading newline so the split is clean.
+  return m.index === 0 ? 0 : m.index + 1;
 }
 
 /**
- * Like tagTopics but also returns full per-topic score details for debugging.
+ * Extract every unique sub-part label found in a question text
+ * (e.g. ["a", "b", "i", "ii"]).
+ *
+ * @param {string} questionText
+ * @returns {string[]}
+ */
+function extractSubParts(questionText) {
+  const matches = [...questionText.matchAll(/\(\s*([a-zA-Z]{1,3})\s*\)/g)];
+  return [...new Set(matches.map((m) => m[1].toLowerCase()))];
+}
+
+/** Weight applied to multi-word keywords (more specific → higher signal). */
+const MULTI_WORD_WEIGHT = 3;
+
+/** Weight applied to single-word keywords. */
+const SINGLE_WORD_WEIGHT = 1;
+
+/**
+ * Extra multiplier for keywords found in the *main question body* (before the
+ * first sub-part label).  This ensures the overall topic of the question
+ * dominates over incidental keywords that appear only in individual sub-parts.
+ */
+const MAIN_BODY_MULTIPLIER = 2;
+
+/**
+ * Score a question against each topic.
+ *
+ * Keywords found in the *main question body* (the text before the first
+ * sub-part label) are given MAIN_BODY_MULTIPLIER× weight so that the overall
+ * subject of the question dominates over incidental keywords in individual
+ * sub-parts.
+ *
+ * Multi-word keywords already receive MULTI_WORD_WEIGHT× weight; that
+ * multiplier is applied on top of the main-body bonus
+ * (main-body multi-word → MULTI_WORD_WEIGHT × MAIN_BODY_MULTIPLIER effective weight).
  *
  * @param {string} questionText
  * @param {{ id: string, label: string, keywords: string[] }[]} topics
- * @returns {TopicScore[]} all topics sorted by score (including zero-score ones)
+ * @returns {{ id: string, label: string, score: number, matchedKeywords: string[] }[]}
+ */
+function scoreTopics(questionText, topics) {
+  const splitIdx = findFirstSubPartIndex(questionText);
+  const mainText = (splitIdx >= 0 ? questionText.slice(0, splitIdx) : questionText).toLowerCase();
+  const subText  = (splitIdx >= 0 ? questionText.slice(splitIdx)    : "").toLowerCase();
+
+  return topics.map((topic) => {
+    const matchedKeywords = [];
+    let score = 0;
+
+    for (const kw of topic.keywords) {
+      const kwLower    = kw.toLowerCase();
+      const baseWeight = kw.includes(" ") ? MULTI_WORD_WEIGHT : SINGLE_WORD_WEIGHT;
+
+      const inMain = mainText.includes(kwLower);
+      const inSub  = !inMain && subText.includes(kwLower);
+
+      if (inMain) {
+        score += baseWeight * MAIN_BODY_MULTIPLIER;
+        matchedKeywords.push(kw);
+      } else if (inSub) {
+        score += baseWeight;
+        matchedKeywords.push(kw);
+      }
+    }
+
+    return { id: topic.id, label: topic.label, score, matchedKeywords };
+  });
+}
+
+/**
+ * Tag a question with its single best-matching topic using keyword scoring.
+ *
+ * Each question is assigned to exactly one topic — the one with the highest
+ * keyword score. If no topic scores at all, the question is tagged as
+ * "unclassified".
+ *
+ * @param {string} questionText
+ * @param {{ id: string, label: string, keywords: string[] }[]} topics
+ * @returns {string[]} singleton array containing the best topic ID
+ */
+export function tagTopics(questionText, topics) {
+  const scored = scoreTopics(questionText, topics)
+    .filter((t) => t.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (scored.length === 0) return ["unclassified"];
+  // Return only the single highest-scoring topic.
+  return [scored[0].id];
+}
+
+/**
+ * Like tagTopics but also returns full per-topic score details for debugging,
+ * plus the list of sub-part labels found in the question.
+ *
+ * @param {string} questionText
+ * @param {{ id: string, label: string, keywords: string[] }[]} topics
+ * @returns {{ topicScores: TopicScore[], subParts: string[] }}
  */
 export function tagTopicsDebug(questionText, topics) {
-  const lower = questionText.toLowerCase();
-  return topics
-    .map((topic) => {
-      const matchedKeywords = topic.keywords.filter((kw) =>
-        lower.includes(kw.toLowerCase())
-      );
-      const score = matchedKeywords.reduce((s, kw) => {
-        return s + (kw.includes(" ") ? 3 : 1);
-      }, 0);
-      return { id: topic.id, label: topic.label, score, matchedKeywords };
-    })
+  const topicScores = scoreTopics(questionText, topics)
     .sort((a, b) => b.score - a.score);
+  const subParts = extractSubParts(questionText);
+  return { topicScores, subParts };
 }
 
 // ─── Question index ───────────────────────────────────────────────────────────
@@ -353,6 +428,7 @@ export function tagTopicsDebug(questionText, topics) {
  * @typedef {Object} QuestionDebugInfo
  * @property {string} matchedLine  — the raw text line that triggered question detection
  * @property {TopicScore[]} topicScores — all topics with their keyword scores
+ * @property {string[]} subParts — sub-part labels found in the question (e.g. ["a","b","i","ii"])
  */
 
 /**
@@ -384,6 +460,7 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
       const rawPages = await extractAllPagesText(pdfDoc);
       const questions = splitIntoQuestions(rawPages);
       for (const q of questions) {
+        const debugResult = tagTopicsDebug(q.text, topics);
         index.push({
           pdfUrl: url,
           number: q.number,
@@ -393,7 +470,8 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
           endPage:   q.endPage,
           debugInfo: {
             matchedLine: q.matchedLine,
-            topicScores: tagTopicsDebug(q.text, topics),
+            topicScores: debugResult.topicScores,
+            subParts:    debugResult.subParts,
           },
         });
       }
