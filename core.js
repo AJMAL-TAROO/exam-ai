@@ -96,8 +96,28 @@ const MIN_GAP_SPACES = 1;
 const MAX_GAP_SPACES = 16;
 
 /**
+ * Matches a bare integer on its own line — used to strip page-number footers.
+ *
+ * Cambridge exam papers print the page number as a standalone digit string at
+ * the very bottom of each page.  PDF.js extracts it as the last line(s) of the
+ * page text.  We therefore apply this filter only to the trailing lines of each
+ * page inside splitIntoQuestions (position-aware), so that it does NOT remove
+ * legitimate question-number markers that appear in the body of a page.
+ * (e.g. "6" alone on a line is Cambridge style for starting question 6.)
+ *
+ * cleanPageText still applies it unconditionally because that function is used
+ * for keyword-based subject/level scanning where question numbers are irrelevant.
+ */
+const STANDALONE_NUMBER_RE = /^\s*\d+\s*$/;
+
+/**
  * Lines that are typically headers or footers in Cambridge exam papers.
  * These are removed from each page's text before question extraction.
+ *
+ * NOTE: STANDALONE_NUMBER_RE is intentionally NOT in this list so that
+ * isContentLine (used by splitIntoQuestions with position awareness) keeps
+ * standalone numbers in the body of a page.  cleanPageText adds the filter
+ * back for the scanning path where question numbers are irrelevant.
  */
 const NOISE_PATTERNS = [
   /^\s*turn\s+over\s*$/i,
@@ -107,7 +127,6 @@ const NOISE_PATTERNS = [
   /^\s*(specimen|mark\s*scheme)\s*$/i,
   /^\s*(additional\s+materials?|answer\s+booklet)\s*/i,
   /^\s*(read\s+these\s+instructions\s+first|information)\s*$/i,
-  /^\s*\d+\s*$/,                               // standalone page numbers
   /^\s*(blank\s+page|this\s+page\s+is\s+intentionally\s+blank)\s*$/i,
   /^\s*(write\s+in\s+the\s+spaces|write\s+your\s+answers?)\s*/i,
   /^\s*if\s+you\s+have\s+been\s+given\s+an?\s+answer\s+booklet/i,
@@ -133,6 +152,7 @@ const NOISE_PATTERNS = [
 
 /**
  * Remove common header/footer noise from a line.
+ * Does NOT filter standalone numbers — see STANDALONE_NUMBER_RE for why.
  * @param {string} line
  * @returns {boolean} true if the line should be kept
  */
@@ -142,13 +162,15 @@ function isContentLine(line) {
 
 /**
  * Clean a page's raw text.
+ * Used for subject/level keyword scanning where question numbers are irrelevant,
+ * so standalone numbers are filtered out here (along with all other noise).
  * @param {string} pageText
  * @returns {string}
  */
 export function cleanPageText(pageText) {
   return pageText
     .split("\n")
-    .filter(isContentLine)
+    .filter((line) => isContentLine(line) && !STANDALONE_NUMBER_RE.test(line))
     .join("\n");
 }
 
@@ -236,8 +258,16 @@ export function splitIntoQuestions(pageTexts) {
   const linePageMap = []; // linePageMap[i] = 1-based page number
 
   for (let p = 0; p < pageTexts.length; p++) {
-    const pageLines = cleanPageText(pageTexts[p]).split("\n");
-    for (const line of pageLines) {
+    const rawLines = pageTexts[p].split("\n");
+    for (let li = 0; li < rawLines.length; li++) {
+      const line = rawLines[li];
+      // Drop standard header/footer noise (paper codes, "Turn over", etc.).
+      if (!isContentLine(line)) continue;
+      // Standalone numbers are page-number footers when they appear at the very
+      // END of the raw page text — but in the body of a page they are question-
+      // number markers (e.g. "6" alone on a line is Cambridge style for Q6).
+      // Only drop them when they sit in the last 3 raw lines of the page.
+      if (STANDALONE_NUMBER_RE.test(line) && li >= rawLines.length - 3) continue;
       lines.push(line);
       linePageMap.push(p + 1);
     }
