@@ -215,6 +215,34 @@ async function onBuildIndexClick() {
 function buildTopicCheckboxes() {
   const container = $("topic-checkboxes");
   container.innerHTML = "";
+
+  // Select All / Deselect All controls
+  const controls = document.createElement("div");
+  controls.className = "topic-select-controls";
+
+  const selectAll = document.createElement("button");
+  selectAll.type = "button";
+  selectAll.className = "btn-link";
+  selectAll.textContent = "Select all";
+  selectAll.addEventListener("click", () => {
+    container.querySelectorAll(".topic-cb").forEach((cb) => { cb.checked = true; });
+  });
+
+  const sep = document.createTextNode(" · ");
+
+  const deselectAll = document.createElement("button");
+  deselectAll.type = "button";
+  deselectAll.className = "btn-link";
+  deselectAll.textContent = "Deselect all";
+  deselectAll.addEventListener("click", () => {
+    container.querySelectorAll(".topic-cb").forEach((cb) => { cb.checked = false; });
+  });
+
+  controls.appendChild(selectAll);
+  controls.appendChild(sep);
+  controls.appendChild(deselectAll);
+  container.appendChild(controls);
+
   state.topics.forEach((topic) => {
     const label = document.createElement("label");
     label.className = "topic-label";
@@ -375,7 +403,10 @@ function renderPaper(paper, seed) {
           </div>
           <div class="ai-debug-row">
             <span class="ai-debug-label">Detected start line</span>
-            <code class="ai-debug-value ai-debug-code">${escapeHtml(matchedLine)}</code>
+            <span class="ai-debug-value">
+              <code class="ai-debug-code">${escapeHtml(matchedLine)}</code>
+              <span class="ai-debug-muted"> (p. ${sp})</span>
+            </span>
           </div>
           <div class="ai-debug-row">
             <span class="ai-debug-label">Sub-parts found</span>
