@@ -96,14 +96,16 @@ const MIN_GAP_SPACES = 1;
 const MAX_GAP_SPACES = 16;
 
 /**
- * Matches a bare integer on its own line — used to strip page-number footers.
+ * Matches a bare integer on its own line — used to strip page-number headers
+ * and footers.
  *
- * Cambridge exam papers print the page number as a standalone digit string at
- * the very bottom of each page.  PDF.js extracts it as the last line(s) of the
- * page text.  We therefore apply this filter only to the trailing lines of each
- * page inside splitIntoQuestions (position-aware), so that it does NOT remove
- * legitimate question-number markers that appear in the body of a page.
- * (e.g. "6" alone on a line is Cambridge style for starting question 6.)
+ * Cambridge exam papers print the page number as a standalone digit string in
+ * the top margin and/or at the very bottom of each page.  PDF.js extracts it
+ * as the first or last line(s) of the page text depending on the paper format.
+ * We therefore apply this filter only to the first 3 and last 3 raw lines of
+ * each page inside splitIntoQuestions (position-aware), so that it does NOT
+ * remove legitimate question-number markers that appear in the body of a page.
+ * (e.g. "6" alone on a line in the body is Cambridge style for starting Q6.)
  *
  * cleanPageText still applies it unconditionally because that function is used
  * for keyword-based subject/level scanning where question numbers are irrelevant.
@@ -208,13 +210,21 @@ const QUESTION_CANDIDATE_RE =
  *   "3 cm"  "2 mm"  "5 km" — length measurements
  *   "2 kg"  "4 mg"  "3 g"  — mass measurements
  *   "2 × 10³"  "3 + x"     — inline mathematics
+ *   "6 ................."  — numbered fill-in blank (sequence placeholder)
+ *
+ * The dotted-line pattern is especially important: Cambridge questions sometimes
+ * contain a numbered completion sequence (e.g. network communication steps 1–8)
+ * where even-numbered rows are blank lines for students to fill in.  Those rows
+ * look like "6 ........................." and would otherwise be mistaken for the
+ * start of question 6, causing all subsequent real questions to shift by one.
  */
 const FALSE_POSITIVE_PATTERNS = [
-  /^\d+\s+marks?\b/i,                  // mark allocations
-  /^\d+\s+(?:cm|mm|km)\b/i,           // length units
-  /^\d+\s+(?:kg|mg|g)\b/i,            // mass units
-  /^\d+\s*[×÷+\-=*]/,                 // mathematical operators
-  /^\d+\s*\(\s*\d/,                   // number followed by parenthesised digit e.g. "3 (2)"
+  /^\s*\d+\s+marks?\b/i,              // mark allocations
+  /^\s*\d+\s+(?:cm|mm|km)\b/i,       // length units
+  /^\s*\d+\s+(?:kg|mg|g)\b/i,        // mass units
+  /^\s*\d+\s*[×÷+\-=*]/,             // mathematical operators
+  /^\s*\d+\s*\(\s*\d/,               // number followed by parenthesised digit e.g. "3 (2)"
+  /^\s*\d+\s+\.{3,}\s*$/,            // fill-in blank: "6 ................."
 ];
 
 /**
@@ -263,11 +273,14 @@ export function splitIntoQuestions(pageTexts) {
       const line = rawLines[li];
       // Drop standard header/footer noise (paper codes, "Turn over", etc.).
       if (!isContentLine(line)) continue;
-      // Standalone numbers are page-number footers when they appear at the very
-      // END of the raw page text — but in the body of a page they are question-
-      // number markers (e.g. "6" alone on a line is Cambridge style for Q6).
-      // Only drop them when they sit in the last 3 raw lines of the page.
-      if (STANDALONE_NUMBER_RE.test(line) && li >= rawLines.length - 3) continue;
+      // Standalone numbers are page-number headers or footers when they appear
+      // at the very START or END of the raw page text.  Cambridge papers render
+      // the page number in the top margin and/or at the bottom of each page;
+      // PDF.js extracts it as one of the first or last raw lines depending on
+      // the paper format.  Only drop standalone numbers from the first 3 and
+      // last 3 raw lines so that question-number markers in the page body are
+      // preserved (e.g. "6" alone on a line in the body is Q6's header).
+      if (STANDALONE_NUMBER_RE.test(line) && (li < 3 || li >= rawLines.length - 3)) continue;
       lines.push(line);
       linePageMap.push(p + 1);
     }
@@ -283,6 +296,11 @@ export function splitIntoQuestions(pageTexts) {
     const prev = questionStarts[questionStarts.length - 1];
     // Must be in sane range and strictly one more than the previous question.
     if (num < 1 || num > 40) continue;
+    // Cambridge papers always begin at question 1.  Requiring the very first
+    // accepted question to be Q1 prevents stray page-number headers (e.g. the
+    // page number "2" at the top of page 2) from being mistakenly accepted as
+    // the first question, which would then cause Q1 to be skipped entirely.
+    if (!prev && num !== 1) continue;
     if (prev && num !== prev.number + 1) continue;
     // Reject if the previous question body has fewer than MIN_LINES_PER_QUESTION
     // non-empty lines — this filters out false positives that sit immediately
