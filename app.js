@@ -444,7 +444,7 @@ function renderPaper(paper, seed) {
 
     // Render pages immediately — no toggle needed; canvas is the primary view.
     const pagesContainer = div.querySelector(".question-pages-container");
-    renderPdfPages(pagesContainer, q.pdfUrl, sp, ep);
+    renderPdfPages(pagesContainer, q.pdfUrl, sp, ep, q.blankPages ?? []);
 
     container.appendChild(div);
   });
@@ -521,19 +521,23 @@ const PDF_MASK_COLOR = "#ffffff";
 /**
  * Render one or more PDF pages as <canvas> elements inside `container`.
  * Replaces any existing content with a loading indicator while working.
+ * Pages listed in `blankPages` are silently skipped (not rendered).
  *
  * @param {HTMLElement} container
  * @param {string} pdfUrl
  * @param {number} startPage — 1-based
  * @param {number} endPage   — 1-based, inclusive
+ * @param {number[]} [blankPages] — 1-based page numbers to skip (blank pages)
  */
-async function renderPdfPages(container, pdfUrl, startPage, endPage) {
+async function renderPdfPages(container, pdfUrl, startPage, endPage, blankPages = []) {
   container.innerHTML =
     `<span class="page-loading">Loading ${startPage === endPage ? "page" : "pages"}…</span>`;
   try {
     const pdfDoc = await getCachedPdfDoc(pdfUrl);
     container.innerHTML = "";
+    const skipSet = new Set(blankPages);
     for (let p = startPage; p <= endPage; p++) {
+      if (skipSet.has(p)) continue; // skip blank pages
       const page     = await pdfDoc.getPage(p);
       const viewport = page.getViewport({ scale: 1.5 });
       const canvas   = document.createElement("canvas");
