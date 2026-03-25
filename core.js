@@ -238,6 +238,46 @@ function isQuestionFalsePositive(line) {
 }
 
 /**
+ * Returns true if the candidate line at index i appears to be part of a
+ * numbered fill-in-the-blank sequence rather than a genuine main question.
+ *
+ * Cambridge exam papers sometimes include ordered completion exercises (e.g.
+ * the steps of a network handshake) where each step is numbered 1–N.
+ * Blank-answer steps are rendered as dotted lines ("6 .......................")
+ * and are already rejected by FALSE_POSITIVE_PATTERNS.  However, steps that
+ * provide a given answer look identical to a main question header — for
+ * example:
+ *
+ *   "7 The booking details are added to the database."
+ *
+ * This line is actually step 7 of a fill-in sequence inside question 5 (f),
+ * not the start of main question 7.
+ *
+ * We detect this situation by checking whether any line within a small context
+ * window around the candidate contains a dotted placeholder whose step number
+ * is adjacent (±2) to `num`.  When such a neighbouring dotted line exists it
+ * strongly indicates that the candidate is part of a fill-in sequence rather
+ * than at a real question boundary.
+ *
+ * @param {string[]} lines - full flattened line array (after noise filtering)
+ * @param {number}   i     - index of the candidate line
+ * @param {number}   num   - question number parsed from the candidate line
+ * @returns {boolean}
+ */
+function isInFillinSequence(lines, i, num) {
+  const WINDOW = 8;
+  const start = Math.max(0, i - WINDOW);
+  const end   = Math.min(lines.length, i + WINDOW + 1);
+  for (let j = start; j < end; j++) {
+    if (j === i) continue;
+    const m = lines[j].match(/^\s*(\d+)\s+\.{3,}/);
+    if (!m) continue;
+    if (Math.abs(parseInt(m[1], 10) - num) <= 2) return true;
+  }
+  return false;
+}
+
+/**
  * Minimum number of non-empty content lines a question must contain before the
  * next question header is accepted as genuine.  Cambridge questions are never
  * just a single line, so anything detected sooner is almost certainly a
@@ -293,6 +333,7 @@ export function splitIntoQuestions(pageTexts) {
     if (!m) continue;
     if (isQuestionFalsePositive(lines[i])) continue;
     const num = parseInt(m[1], 10);
+    if (isInFillinSequence(lines, i, num)) continue;
     const prev = questionStarts[questionStarts.length - 1];
     // Must be in sane range and strictly one more than the previous question.
     if (num < 1 || num > 40) continue;
