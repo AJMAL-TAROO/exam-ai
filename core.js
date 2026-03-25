@@ -163,6 +163,27 @@ function isContentLine(line) {
 }
 
 /**
+ * Regex matching a "BLANK PAGE" or "THIS PAGE IS INTENTIONALLY LEFT BLANK" notice.
+ * Used to detect PDF pages that should be excluded from question rendering.
+ *
+ * The `m` flag is intentional: raw page text is a multi-line string and we want
+ * to test whether *any* line within it is a standalone blank-page declaration,
+ * even if other lines (page numbers, headers) are present on the same page.
+ */
+const BLANK_PAGE_RE = /^\s*(blank\s+page|this\s+page\s+is\s+intentionally\s+(left\s+)?blank)\s*$/im;
+
+/**
+ * Return true when the raw page text belongs to a blank page — i.e. the page
+ * explicitly declares itself as blank via the standard Cambridge notice.
+ *
+ * @param {string} rawPageText
+ * @returns {boolean}
+ */
+function isBlankPage(rawPageText) {
+  return BLANK_PAGE_RE.test(rawPageText);
+}
+
+/**
  * Clean a page's raw text.
  * Used for subject/level keyword scanning where question numbers are irrelevant,
  * so standalone numbers are filtered out here (along with all other noise).
@@ -210,7 +231,10 @@ const QUESTION_CANDIDATE_RE =
  *   "3 cm"  "2 mm"  "5 km" — length measurements
  *   "2 kg"  "4 mg"  "3 g"  — mass measurements
  *   "2 × 10³"  "3 + x"     — inline mathematics
- *   "6 ................."  — numbered fill-in blank (sequence placeholder)
+ *   "6 ................."   — numbered fill-in blank (sequence placeholder)
+ *   "6. ................."  — same with trailing period
+ *   "Question 5 ......."   — dotted-line placeholder with full "Question N" prefix
+ *   "Question 5 continues on the next page" — continuation notice (not a new question)
  *
  * The dotted-line pattern is especially important: Cambridge questions sometimes
  * contain a numbered completion sequence (e.g. network communication steps 1–8)
@@ -224,7 +248,9 @@ const FALSE_POSITIVE_PATTERNS = [
   /^\s*\d+\s+(?:kg|mg|g)\b/i,        // mass units
   /^\s*\d+\s*[×÷+\-=*]/,             // mathematical operators
   /^\s*\d+\s*\(\s*\d/,               // number followed by parenthesised digit e.g. "3 (2)"
-  /^\s*\d+\s+\.{3,}\s*$/,            // fill-in blank: "6 ................."
+  /^\s*\d+\.?\s+\.{3,}/,              // fill-in blank or dotted: "6 ......." or "6. ......."
+  /^\s*question\s+\d+\s+\.{3,}/i,   // dotted with "Question" prefix: "Question 5 ......."
+  /^\s*(?:question\s+)?\d+\s+continues?\b/i, // continuation notice: "Question 5 continues on the next page"
 ];
 
 /**
@@ -299,7 +325,7 @@ const MIN_LINES_PER_QUESTION = 2;
  *  4. Slice between consecutive accepted starts.
  *
  * @param {string[]} pageTexts — raw text per page (cleaning is applied here)
- * @returns {{ number: number, text: string, startPage: number, endPage: number }[]}
+ * @returns {{ number: number, text: string, startPage: number, endPage: number, blankPages: number[] }[]}
  */
 export function splitIntoQuestions(pageTexts) {
   // Build a flat line array and a parallel array mapping each line to its
@@ -307,7 +333,12 @@ export function splitIntoQuestions(pageTexts) {
   const lines       = [];
   const linePageMap = []; // linePageMap[i] = 1-based page number
 
+  // Detect blank pages (pages that explicitly say "BLANK PAGE") so they can be
+  // excluded from the rendered output.
+  const blankPageNums = new Set();
+
   for (let p = 0; p < pageTexts.length; p++) {
+    if (isBlankPage(pageTexts[p])) blankPageNums.add(p + 1); // 1-based
     const rawLines = pageTexts[p].split("\n");
     for (let li = 0; li < rawLines.length; li++) {
       const line = rawLines[li];
@@ -363,13 +394,26 @@ export function splitIntoQuestions(pageTexts) {
       i + 1 < questionStarts.length ? questionStarts[i + 1].index : lines.length;
     const text = lines.slice(start, end).join("\n").trim();
     if (text.length > 10) {
+      const startPage = linePageMap[start] ?? 1;
+      // End the question one page before the next question begins.  This ensures
+      // the last page shown for question N does not bleed into the first page of
+      // question N+1.  For the final question, use the page of its last line.
+      let endPage;
+      if (i + 1 < questionStarts.length) {
+        const nextQPage = linePageMap[questionStarts[i + 1].index] ?? startPage;
+        endPage = Math.max(startPage, nextQPage - 1);
+      } else {
+        endPage = linePageMap[end - 1] ?? startPage;
+      }
+      // Collect blank pages that fall within this question's page range.
+      const blankPages = [...blankPageNums].filter((p) => p >= startPage && p <= endPage);
       questions.push({
         number: questionStarts[i].number,
         text,
         matchedLine: lines[start],
-        startPage: linePageMap[start] ?? 1,
-        // `end` is exclusive, so the last line of the question is at `end - 1`.
-        endPage:   linePageMap[end - 1] ?? linePageMap[start] ?? 1,
+        startPage,
+        endPage,
+        blankPages,
       });
     }
   }
@@ -557,8 +601,9 @@ export function tagTopicsDebug(questionText, topics) {
  * @property {number} number
  * @property {string} text
  * @property {string[]} topics
- * @property {number} startPage — 1-based page where the question begins
- * @property {number} endPage   — 1-based page where the question ends (≥ startPage)
+ * @property {number} startPage  — 1-based page where the question begins
+ * @property {number} endPage    — 1-based page where the question ends (≥ startPage)
+ * @property {number[]} blankPages — 1-based page numbers within [startPage, endPage] that are blank
  * @property {QuestionDebugInfo} debugInfo — AI analysis details for review
  */
 
@@ -597,6 +642,7 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
           topics: tagTopics(q.text, topics),
           startPage: q.startPage,
           endPage:   q.endPage,
+          blankPages: q.blankPages ?? [],
           debugInfo: {
             matchedLine: q.matchedLine,
             topicScores: debugResult.topicScores,
