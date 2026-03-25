@@ -44,27 +44,39 @@ export async function extractPageText(page) {
   return sortedRows
     .map(([, items]) => {
       const sorted = items.sort((a, b) => a.transform[4] - b.transform[4]);
-      if (sorted.length === 1) return sorted[0].str.trim();
+      // Detect whether the first text item on this row uses a bold font.
+      // splitIntoQuestions uses this to identify question-header lines.
+      const startsWithBold = isBoldItem(content.styles, sorted[0]);
 
       // Reconstruct the row preserving inter-column spacing.
       // For each adjacent pair of items we measure the pixel gap between the
       // end of the previous item and the start of the next, then convert it to
       // a number of space characters proportional to the average character
       // width.  This keeps table columns legible in the extracted text.
-      let line = sorted[0].str;
-      for (let i = 1; i < sorted.length; i++) {
-        const prev = sorted[i - 1];
-        const cur  = sorted[i];
-        const itemWidth = prev.width > 0 ? prev.width : 0;
-        const gapPx     = cur.transform[4] - (prev.transform[4] + itemWidth);
-        const charWidth  = prev.str.length > 0
-          ? (prev.width > 0 ? prev.width : DEFAULT_CHAR_WIDTH) / prev.str.length
-          : DEFAULT_CHAR_WIDTH;
-        // Map pixel gap to space count; clamp to MIN_GAP_SPACES–MAX_GAP_SPACES.
-        const spaces = Math.min(MAX_GAP_SPACES, Math.max(MIN_GAP_SPACES, Math.round(gapPx / charWidth)));
-        line += " ".repeat(spaces) + cur.str;
+      let line;
+      if (sorted.length === 1) {
+        line = sorted[0].str.trim();
+      } else {
+        let built = sorted[0].str;
+        for (let i = 1; i < sorted.length; i++) {
+          const prev = sorted[i - 1];
+          const cur  = sorted[i];
+          const itemWidth = prev.width > 0 ? prev.width : 0;
+          const gapPx     = cur.transform[4] - (prev.transform[4] + itemWidth);
+          const charWidth  = prev.str.length > 0
+            ? (prev.width > 0 ? prev.width : DEFAULT_CHAR_WIDTH) / prev.str.length
+            : DEFAULT_CHAR_WIDTH;
+          // Map pixel gap to space count; clamp to MIN_GAP_SPACES–MAX_GAP_SPACES.
+          const spaces = Math.min(MAX_GAP_SPACES, Math.max(MIN_GAP_SPACES, Math.round(gapPx / charWidth)));
+          built += " ".repeat(spaces) + cur.str;
+        }
+        line = built.trim();
       }
-      return line.trim();
+
+      if (!line) return null;
+      // Prefix bold-starting lines so that splitIntoQuestions can identify
+      // question headers by their bold formatting.
+      return startsWithBold ? BOLD_LINE_PREFIX + line : line;
     })
     .filter(Boolean)
     .join("\n");
@@ -94,6 +106,28 @@ const MIN_GAP_SPACES = 1;
 
 /** Maximum number of spaces inserted to represent an inter-item gap. */
 const MAX_GAP_SPACES = 16;
+
+/**
+ * Prefix prepended to a line whose first text item is rendered in a bold font.
+ * Used by splitIntoQuestions to identify question-header lines by their bold
+ * formatting rather than relying on text patterns alone.
+ */
+const BOLD_LINE_PREFIX = '\x01';
+
+/**
+ * Return true when the given PDF text item uses a bold font.
+ * Checks the fontFamily from the styles map (most reliable) and falls back to
+ * the raw fontName string that PDF.js sometimes embeds with a descriptor.
+ *
+ * @param {Object} styles — the `styles` object returned by getTextContent()
+ * @param {Object} item   — a single text item from content.items
+ * @returns {boolean}
+ */
+function isBoldItem(styles, item) {
+  if (!item) return false;
+  const family = styles?.[item.fontName]?.fontFamily ?? '';
+  return /bold/i.test(family) || /bold/i.test(item.fontName ?? '');
+}
 
 /**
  * Matches a bare integer on its own line — used to strip page-number headers
@@ -159,7 +193,8 @@ const NOISE_PATTERNS = [
  * @returns {boolean} true if the line should be kept
  */
 function isContentLine(line) {
-  return !NOISE_PATTERNS.some((p) => p.test(line));
+  const plain = line.startsWith(BOLD_LINE_PREFIX) ? line.slice(BOLD_LINE_PREFIX.length) : line;
+  return !NOISE_PATTERNS.some((p) => p.test(plain));
 }
 
 /**
@@ -169,8 +204,11 @@ function isContentLine(line) {
  * The `m` flag is intentional: raw page text is a multi-line string and we want
  * to test whether *any* line within it is a standalone blank-page declaration,
  * even if other lines (page numbers, headers) are present on the same page.
+ * The leading \x01? makes the bold prefix optional: blank-page notices might
+ * appear in bold (e.g. a Cambridge paper that renders "BLANK PAGE" in a bold
+ * font) or in plain text, so both forms must be matched.
  */
-const BLANK_PAGE_RE = /^\s*(blank\s+page|this\s+page\s+is\s+intentionally\s+(left\s+)?blank)\s*$/im;
+const BLANK_PAGE_RE = /^\x01?\s*(blank\s+page|this\s+page\s+is\s+intentionally\s+(left\s+)?blank)\s*$/im;
 
 /**
  * Return true when the raw page text belongs to a blank page — i.e. the page
@@ -187,12 +225,14 @@ function isBlankPage(rawPageText) {
  * Clean a page's raw text.
  * Used for subject/level keyword scanning where question numbers are irrelevant,
  * so standalone numbers are filtered out here (along with all other noise).
+ * Bold-prefix markers inserted by extractPageText are stripped from each line.
  * @param {string} pageText
  * @returns {string}
  */
 export function cleanPageText(pageText) {
   return pageText
     .split("\n")
+    .map((line) => line.startsWith(BOLD_LINE_PREFIX) ? line.slice(BOLD_LINE_PREFIX.length) : line)
     .filter((line) => isContentLine(line) && !STANDALONE_NUMBER_RE.test(line))
     .join("\n");
 }
@@ -202,7 +242,11 @@ export function cleanPageText(pageText) {
 /**
  * Regex for a *candidate* question-start line.
  *
- * Accepted forms:
+ * Cambridge exam papers render question numbers in bold.  extractPageText
+ * prepends BOLD_LINE_PREFIX (\x01) to every line whose first text item is
+ * bold, so a genuine question header will always start with \x01.
+ *
+ * Accepted forms (immediately after the bold prefix):
  *   "1"           — number alone on a line (Cambridge style: number above question body)
  *   "1."          — number with trailing period, alone on a line
  *   "1 text…"     — number followed by question text on the same line
@@ -211,16 +255,20 @@ export function cleanPageText(pageText) {
  *   "Q1 …"        — Q-prefix variants
  *   "Question 1"  — full word prefix
  *
+ * Leading-zero numbers are rejected by the character class [1-9]\d? — this
+ * rejects "04", "01", "08" etc. which appear in paper codes but never as
+ * genuine Cambridge main-question numbers.
+ *
  * This is a broad first pass.  False positives are removed by
  * isQuestionFalsePositive() below.
- *
- * NOTE: The negative lookahead only excludes a bare digit following the
- * question number (e.g. "3 5 marks"), NOT a parenthesis.  Excluding "("
- * was the original bug: Cambridge questions often start "3 (a) …" where
- * the sub-part marker sits on the same line as the question number.
  */
 const QUESTION_CANDIDATE_RE =
-  /^(?:Question\s+|Q\.?\s*)?(\d{1,2})(?:\s*\.?\s*$|(?:\.\s+|\s+)(?!\s*\d))/im;
+  // \x01               — bold prefix (set by extractPageText)
+  // (?:Question\s+|…)? — optional "Question " / "Q" word prefix
+  // ([1-9]\d?)         — 1- or 2-digit number, no leading zero (rejects "04")
+  // (?:…|…)            — number ends the line OR is followed by "." / space
+  // (?!\s*\d)          — NOT immediately followed by another digit (avoids e.g. "3 5 marks")
+  /^\x01(?:Question\s+|Q\.?\s*)?([1-9]\d?)(?:\s*\.?\s*$|(?:\.\s+|\s+)(?!\s*\d))/i;
 
 /**
  * Patterns that identify a candidate line as a false positive — i.e. it is NOT
@@ -260,7 +308,8 @@ const FALSE_POSITIVE_PATTERNS = [
  * @returns {boolean}
  */
 function isQuestionFalsePositive(line) {
-  return FALSE_POSITIVE_PATTERNS.some((re) => re.test(line));
+  const plain = line.startsWith(BOLD_LINE_PREFIX) ? line.slice(BOLD_LINE_PREFIX.length) : line;
+  return FALSE_POSITIVE_PATTERNS.some((re) => re.test(plain));
 }
 
 /**
@@ -296,7 +345,8 @@ function isInFillinSequence(lines, i, num) {
   const end   = Math.min(lines.length, i + WINDOW + 1);
   for (let j = start; j < end; j++) {
     if (j === i) continue;
-    const m = lines[j].match(/^\s*(\d+)\s+\.{3,}/);
+    const plain = lines[j].startsWith(BOLD_LINE_PREFIX) ? lines[j].slice(BOLD_LINE_PREFIX.length) : lines[j];
+    const m = plain.match(/^\s*(\d+)\s+\.{3,}/);
     if (!m) continue;
     if (Math.abs(parseInt(m[1], 10) - num) <= 2) return true;
   }
@@ -317,12 +367,16 @@ const MIN_LINES_PER_QUESTION = 2;
  * Strategy:
  *  1. Flatten all pages into a single line array, recording which PDF page
  *     (1-based) each line came from so we can report startPage / endPage.
- *  2. Find every line matching QUESTION_START_RE.
- *  3. Accept only strictly-monotonically-increasing question numbers (1, 2, 3 …)
- *     within the range 1-40, AND only when the previous question already contains
- *     at least MIN_LINES_PER_QUESTION non-empty lines (guards against a false
- *     positive appearing on the very first or second line of a real question).
- *  4. Slice between consecutive accepted starts.
+ *  2. Find every bold line (prefixed with BOLD_LINE_PREFIX by extractPageText)
+ *     whose first text is a question number without a leading zero (1–40).
+ *     Bold formatting is the primary signal — Cambridge exam papers always
+ *     render question numbers in bold.
+ *  3. Accept only strictly-monotonically-increasing question numbers (1, 2, 3 …),
+ *     rejecting continuation notices, fill-in sequences, and lines with fewer
+ *     than MIN_LINES_PER_QUESTION non-empty body lines before the next header.
+ *  4. Slice between consecutive accepted starts.  Each question ends one page
+ *     before the page where the next question begins; blank pages ("BLANK PAGE")
+ *     within the range are tracked for the caller.
  *
  * @param {string[]} pageTexts — raw text per page (cleaning is applied here)
  * @returns {{ number: number, text: string, startPage: number, endPage: number, blankPages: number[] }[]}
@@ -392,7 +446,12 @@ export function splitIntoQuestions(pageTexts) {
     const start = questionStarts[i].index;
     const end =
       i + 1 < questionStarts.length ? questionStarts[i + 1].index : lines.length;
-    const text = lines.slice(start, end).join("\n").trim();
+    // Strip bold-prefix markers before joining into the final question text.
+    const text = lines
+      .slice(start, end)
+      .map((l) => (l.startsWith(BOLD_LINE_PREFIX) ? l.slice(BOLD_LINE_PREFIX.length) : l))
+      .join("\n")
+      .trim();
     if (text.length > 10) {
       const startPage = linePageMap[start] ?? 1;
       // End the question one page before the next question begins.  This ensures
@@ -410,7 +469,7 @@ export function splitIntoQuestions(pageTexts) {
       questions.push({
         number: questionStarts[i].number,
         text,
-        matchedLine: lines[start],
+        matchedLine: lines[start].startsWith(BOLD_LINE_PREFIX) ? lines[start].slice(BOLD_LINE_PREFIX.length) : lines[start],
         startPage,
         endPage,
         blankPages,
