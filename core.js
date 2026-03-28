@@ -5,6 +5,7 @@
  */
 
 import { detectSubject, detectLevel } from "./subjects/subject-detect.js";
+import { augmentWithHybridScores } from "./topicScorer.js";
 
 // ─── PDF.js helpers ──────────────────────────────────────────────────────────
 
@@ -816,23 +817,37 @@ function scoreTopics(questionText, topics) {
 }
 
 /**
- * Tag a question with its single best-matching topic using keyword scoring.
+ * Augment keyword scores with TF-IDF hybrid scores and return all per-topic
+ * results sorted by hybrid score descending.
+ *
+ * @param {string} questionText
+ * @param {{ id: string, label: string, keywords: string[] }[]} topics
+ * @returns {Array<import('./topicScorer.js').AugmentedTopicScore>}
+ */
+function scoreTopicsHybrid(questionText, topics) {
+  const keywordScored = scoreTopics(questionText, topics);
+  return augmentWithHybridScores(questionText, keywordScored)
+    .sort((a, b) => b.hybridScore - a.hybridScore);
+}
+
+/**
+ * Tag a question with its single best-matching topic using the hybrid scorer.
  *
  * Each question is assigned to exactly one topic — the one with the highest
- * keyword score. If no topic scores at all, the question is tagged as
- * "unclassified".
+ * hybrid score (TF-IDF cosine similarity + normalised keyword score).  Topics
+ * whose hybrid score falls below the "borderline" threshold are excluded, so
+ * a question is tagged as "unclassified" only when no topic achieves even a
+ * minimal relevance signal.
  *
  * @param {string} questionText
  * @param {{ id: string, label: string, keywords: string[] }[]} topics
  * @returns {string[]} singleton array containing the best topic ID
  */
 export function tagTopics(questionText, topics) {
-  const scored = scoreTopics(questionText, topics)
-    .filter((t) => t.score > 0)
-    .sort((a, b) => b.score - a.score);
+  const scored = scoreTopicsHybrid(questionText, topics)
+    .filter((t) => t.relatedness !== "not_related");
 
   if (scored.length === 0) return ["unclassified"];
-  // Return only the single highest-scoring topic.
   return [scored[0].id];
 }
 
@@ -845,8 +860,7 @@ export function tagTopics(questionText, topics) {
  * @returns {{ topicScores: TopicScore[], subParts: string[] }}
  */
 export function tagTopicsDebug(questionText, topics) {
-  const topicScores = scoreTopics(questionText, topics)
-    .sort((a, b) => b.score - a.score);
+  const topicScores = scoreTopicsHybrid(questionText, topics);
   const subParts = extractSubParts(questionText);
   return { topicScores, subParts };
 }
@@ -864,8 +878,12 @@ export function tagTopicsDebug(questionText, topics) {
  * @typedef {Object} TopicScore
  * @property {string} id
  * @property {string} label
- * @property {number} score
+ * @property {number} score — raw keyword score
  * @property {MatchedKeyword[]} matchedKeywords
+ * @property {number} hybridScore — combined TF-IDF + keyword score in [0, 1]
+ * @property {number} tfidfScore — TF-IDF cosine similarity component in [0, 1]
+ * @property {number} kwNormScore — normalised keyword score in [0, 1]
+ * @property {"related"|"borderline"|"not_related"} relatedness — categorised hybrid score
  */
 
 /**

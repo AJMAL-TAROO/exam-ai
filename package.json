@@ -1,0 +1,9 @@
+{
+  "name": "exam-ai",
+  "version": "1.0.0",
+  "description": "Randomized past-paper generator",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/topicScorer.test.js"
+  }
+}
