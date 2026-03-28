@@ -354,9 +354,13 @@ function renderPaper(paper, seed) {
 
     // Build AI debug rows for topic scores
     const debug = q.debugInfo || {};
-    const matchedLine = debug.matchedLine ?? "";
-    const topicScores = debug.topicScores ?? [];
-    const subParts    = debug.subParts    ?? [];
+    const matchedLine  = debug.matchedLine  ?? "";
+    const topicScores  = debug.topicScores  ?? [];
+    const subParts     = debug.subParts     ?? [];
+    const extractionMode        = debug.extractionMode        ?? "bold";
+    const candidateHeadersFound = debug.candidateHeadersFound ?? 0;
+    const lowTextCoverage       = debug.lowTextCoverage       ?? false;
+    const avgCharsPerPage       = debug.avgCharsPerPage       ?? 0;
 
     // The single assigned topic for this question
     const assignedTopicId = q.topics[0] ?? "unclassified";
@@ -379,6 +383,18 @@ function renderPaper(paper, seed) {
     const subPartsHtml = subParts.length > 0
       ? subParts.map((p) => `<code class="ai-debug-subpart">(${escapeHtml(p)})</code>`).join(" ")
       : `<span class="ai-debug-muted">none detected</span>`;
+
+    // Render extraction-mode badge with colour coding.
+    const modeColour = extractionMode === "bold"
+      ? "var(--color-success)"
+      : extractionMode === "geometric"
+        ? "var(--color-warn)"
+        : "var(--color-error)";
+    const modeBadge = `<span style="font-weight:600;color:${modeColour}">${escapeHtml(extractionMode)}</span>`;
+
+    const coverageBadge = lowTextCoverage
+      ? `<span style="color:var(--color-warn)">⚠ low (${avgCharsPerPage} chars/page avg)</span>`
+      : `<span style="color:var(--color-success)">✓ ok (${avgCharsPerPage} chars/page avg)</span>`;
 
     div.innerHTML = `
       <div class="question-header">
@@ -407,6 +423,16 @@ function renderPaper(paper, seed) {
               <code class="ai-debug-code">${escapeHtml(matchedLine)}</code>
               <span class="ai-debug-muted"> (p. ${sp})</span>
             </span>
+          </div>
+          <div class="ai-debug-row">
+            <span class="ai-debug-label">Extraction mode</span>
+            <span class="ai-debug-value">${modeBadge}
+              <span class="ai-debug-muted"> &mdash; ${candidateHeadersFound} candidate header(s) considered</span>
+            </span>
+          </div>
+          <div class="ai-debug-row">
+            <span class="ai-debug-label">Text coverage</span>
+            <span class="ai-debug-value">${coverageBadge}</span>
           </div>
           <div class="ai-debug-row">
             <span class="ai-debug-label">Sub-parts found</span>
