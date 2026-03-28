@@ -194,7 +194,7 @@ export function augmentWithHybridScores(questionText, scoredTopics) {
     const kwNormScore = maxKw > 0 ? topic.score / maxKw : 0;
 
     // TF-IDF similarity between question and topic keyword list.
-    const topicText = topic.keywords.join(" ");
+    const topicText = (Array.isArray(topic.keywords) ? topic.keywords : []).join(" ");
     const tfidfScore = tfidfCosineSimilarity(questionText, topicText);
 
     const hybridScore =

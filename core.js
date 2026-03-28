@@ -825,7 +825,17 @@ function scoreTopics(questionText, topics) {
  * @returns {Array<import('./topicScorer.js').AugmentedTopicScore>}
  */
 function scoreTopicsHybrid(questionText, topics) {
-  const keywordScored = scoreTopics(questionText, topics);
+  // Build a lookup so keywords can be re-attached after the scoring pass.
+  const keywordsById = Object.fromEntries(topics.map((t) => [t.id, Array.isArray(t.keywords) ? t.keywords : []]));
+
+  // scoreTopics() returns objects without the keywords field; merge them back
+  // so that augmentWithHybridScores() can compute TF-IDF against each topic's
+  // keyword list without throwing on topic.keywords.join().
+  const keywordScored = scoreTopics(questionText, topics).map((scored) => ({
+    ...scored,
+    keywords: Array.isArray(keywordsById[scored.id]) ? keywordsById[scored.id] : [],
+  }));
+
   return augmentWithHybridScores(questionText, keywordScored)
     .sort((a, b) => b.hybridScore - a.hybridScore);
 }
