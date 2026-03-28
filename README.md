@@ -36,10 +36,14 @@ exam-ai/
 ├── index.html              # Single-page UI
 ├── app.js                  # UI state machine & event handlers
 ├── core.js                 # PDF processing, question splitting, topic tagging, shuffle
+├── topicScorer.js          # Hybrid TF-IDF + keyword topic scorer
+├── package.json            # npm test script (no runtime dependencies)
 ├── subjects/
 │   ├── subject-detect.js   # Keyword-based subject/level detection
 │   ├── topics-o.js         # O Level topic lists (Maths, Physics, CS)
 │   └── topics-a.js         # A Level topic lists (Maths, Physics, CS)
+├── tests/
+│   └── topicScorer.test.js # Unit tests for the hybrid scorer
 └── assets/
     └── manifest.json       # Lists all bundled PDF URLs per level & subject
 ```
@@ -156,13 +160,85 @@ The AI debug panel (expandable under each question) now shows:
 - **Text coverage** — whether the source PDF had adequate extractable text
 
 ### Topic tagging
-Each question is scored against a keyword list for every topic in the syllabus.
-Topics whose score is ≥ 50 % of the best-scoring topic are assigned to the
-question. Unmatched questions receive the tag `unclassified`.
+Each question is scored against all topics in the syllabus using a **hybrid
+scorer** (`topicScorer.js`) that combines two signals:
+
+1. **Keyword score** — keywords found in the question body are weighted by
+   specificity (multi-word phrases score higher than single words) and position
+   (main question body scores higher than sub-parts).  The raw score is
+   normalised relative to the highest-scoring topic in the batch so that the
+   best keyword match always contributes a normalised 1.0.
+2. **TF-IDF cosine similarity** — the question text is compared to each
+   topic's keyword list treated as a reference document using smooth TF-IDF
+   vectors.  Terms shared by both documents are down-weighted (IDF), so
+   subject-specific vocabulary carries more signal than common words.
+
+The two signals are combined into a single hybrid score:
+
+```
+hybridScore = 0.6 × tfidfSimilarity + 0.4 × normalizedKeywordScore
+```
+
+Topics are ranked by hybrid score.  The highest-ranking topic whose score
+meets the minimum threshold is assigned; questions that score below the
+threshold are tagged `unclassified`.
+
+The hybrid approach improves on keyword-only matching by:
+- **Better disambiguation** — when multiple topics have keyword matches,
+  TF-IDF vocabulary overlap breaks ties more accurately.
+- **Reduced false positives** — a single incidental keyword match in
+  an unrelated question produces a low hybrid score and can fall below
+  the threshold.
+- **Improved recall** — questions sharing topical vocabulary but lacking
+  exact keyword matches still receive a non-zero TF-IDF component.
+
+#### Tuning thresholds
+
+`topicScorer.js` exports two configurable objects:
+
+```js
+// Minimum hybrid scores for each relatedness band
+export const THRESHOLDS = {
+  related:    0.15,  // raise for higher precision
+  borderline: 0.05,  // lower for higher recall
+};
+
+// Mixture weights (must sum to 1.0)
+export const WEIGHTS = {
+  tfidf:   0.6,
+  keyword: 0.4,
+};
+```
+
+Increase `THRESHOLDS.related` to reduce false positives at the cost of more
+`unclassified` questions.  Decrease `THRESHOLDS.borderline` to allow more
+marginal matches through.  Adjust `WEIGHTS` to shift the balance between
+semantic similarity and exact keyword matching.
+
+The AI debug panel (expandable under each question) shows the raw keyword
+score, the hybrid score, and the relatedness category (`related`,
+`borderline`, or `not_related`) for every topic that scored above zero, so
+you can see exactly why each question was assigned its topic.
 
 ### Seeded shuffle
 The Mulberry32 algorithm provides a fast, deterministic PRNG. Providing the same
 seed always produces the same paper from the same index.
+
+---
+
+## Testing
+
+The hybrid topic scorer ships with a self-contained test suite that runs under
+Node.js (≥ 18) with no additional dependencies:
+
+```bash
+npm test
+# or directly:
+node tests/topicScorer.test.js
+```
+
+The suite covers tokenisation, TF-IDF similarity, categorisation thresholds,
+hybrid scoring, paraphrase-like detection, and false-positive reduction.
 
 ---
 

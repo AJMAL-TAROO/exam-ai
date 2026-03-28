@@ -369,14 +369,28 @@ function renderPaper(paper, seed) {
     const assignedKeywords = assignedTopicScore?.matchedKeywords ?? [];
 
     const topicScoreRows = topicScores
-      .filter((ts) => ts.score > 0)
+      .filter((ts) => ts.score > 0 || (ts.hybridScore ?? 0) > 0)
       .map(
-        (ts) =>
-          `<tr${ts.id === assignedTopicId ? ' class="ai-debug-assigned-row"' : ""}>
+        (ts) => {
+          const hybrid = ts.hybridScore != null
+            ? ts.hybridScore.toFixed(3)
+            : "—";
+          const relatedness = ts.relatedness ?? "";
+          const relColour = relatedness === "related"
+            ? "var(--color-success)"
+            : relatedness === "borderline"
+              ? "var(--color-warn)"
+              : "var(--color-error)";
+          const relBadge = relatedness
+            ? `<span style="color:${relColour};font-weight:600">${escapeHtml(relatedness)}</span>`
+            : "";
+          return `<tr${ts.id === assignedTopicId ? ' class="ai-debug-assigned-row"' : ""}>
             <td class="ai-debug-topic">${escapeHtml(ts.label)}</td>
             <td class="ai-debug-score">${ts.score}</td>
+            <td class="ai-debug-score">${hybrid} ${relBadge}</td>
             <td class="ai-debug-kw">${ts.matchedKeywords.map(renderKeywordBadge).join(" ")}</td>
-          </tr>`
+          </tr>`;
+        }
       )
       .join("");
 
@@ -452,7 +466,7 @@ function renderPaper(paper, seed) {
               ? `<div class="ai-debug-row ai-debug-row--table">
                   <span class="ai-debug-label">All topic scores</span>
                   <table class="ai-debug-table">
-                    <thead><tr><th>Topic</th><th>Score</th><th>Matched keywords</th></tr></thead>
+                    <thead><tr><th>Topic</th><th>Kw score</th><th>Hybrid score</th><th>Matched keywords</th></tr></thead>
                     <tbody>${topicScoreRows}</tbody>
                   </table>
                 </div>`
