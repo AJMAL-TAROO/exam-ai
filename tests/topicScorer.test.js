@@ -309,6 +309,42 @@ test("THRESHOLDS.borderline >= 0", () => {
   assert.ok(THRESHOLDS.borderline >= 0);
 });
 
+// ─── Defensive: missing keywords field ───────────────────────────────────────
+
+console.log("\nDefensive: missing keywords field");
+
+test("augmentWithHybridScores does not throw when topic.keywords is undefined", () => {
+  // Simulate the object shape returned by scoreTopics() before the core.js fix:
+  // scoreTopics() omits the keywords field, which would previously cause a
+  // TypeError: Cannot read properties of undefined (reading 'join').
+  const topicWithoutKeywords = {
+    id: "mechanics",
+    label: "Mechanics",
+    score: 6,
+    matchedKeywords: [{ kw: "velocity", location: "main", context: "" }],
+    // No keywords field
+  };
+  let results;
+  assert.doesNotThrow(() => {
+    results = augmentWithHybridScores("A body moves at constant velocity", [topicWithoutKeywords]);
+  });
+  assert.equal(results.length, 1);
+  assert.ok(typeof results[0].hybridScore === "number");
+  assert.ok(typeof results[0].tfidfScore === "number");
+});
+
+test("augmentWithHybridScores does not throw when topic.keywords is null", () => {
+  const topicWithNullKeywords = {
+    ...mechanicsTopic,
+    keywords: null,
+    score: 0,
+    matchedKeywords: [],
+  };
+  assert.doesNotThrow(() => {
+    augmentWithHybridScores("Any question text", [topicWithNullKeywords]);
+  });
+});
+
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} test(s): ${passed} passed, ${failed} failed\n`);
