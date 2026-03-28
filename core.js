@@ -271,6 +271,20 @@ const QUESTION_CANDIDATE_RE =
   /^\x01(?:Question\s+|Q\.?\s*)?([1-9]\d?)(?:\s*\.?\s*$|(?:\.\s+|\s+)(?!\s*\d))/i;
 
 /**
+ * Fallback regex used when bold-prefix detection yields no questions.
+ *
+ * Some PDFs use font metadata that does not include the word "bold" in either
+ * the fontFamily or fontName reported by PDF.js, so isBoldItem() returns false
+ * for every line and QUESTION_CANDIDATE_RE never matches.  When that happens
+ * splitIntoQuestions() retries with this regex, which is identical except that
+ * the bold prefix (\x01) is made optional (\x01?).  The same false-positive
+ * filters and monotonic-numbering validation are applied, so the only practical
+ * change is that plain (non-bold) lines are also eligible as question headers.
+ */
+const QUESTION_CANDIDATE_FALLBACK_RE =
+  /^\x01?(?:Question\s+|Q\.?\s*)?([1-9]\d?)(?:\s*\.?\s*$|(?:\.\s+|\s+)(?!\s*\d))/i;
+
+/**
  * Patterns that identify a candidate line as a false positive — i.e. it is NOT
  * really the start of a new question even though it begins with a number.
  *
@@ -362,6 +376,52 @@ function isInFillinSequence(lines, i, num) {
 const MIN_LINES_PER_QUESTION = 2;
 
 /**
+ * Scan `lines` for candidate question-start positions using `candidateRE`.
+ *
+ * Applies the same false-positive filters and monotonic-numbering validation
+ * that splitIntoQuestions uses, so the result can be used directly as the
+ * `questionStarts` array.
+ *
+ * Extracted into a helper so splitIntoQuestions can call it twice: first with
+ * QUESTION_CANDIDATE_RE (bold-prefix required) and then, if no questions are
+ * found, again with QUESTION_CANDIDATE_FALLBACK_RE (bold-prefix optional).
+ *
+ * @param {string[]} lines      — flat filtered line array
+ * @param {RegExp}   candidateRE — regex used to identify candidate lines
+ * @returns {{ index: number, number: number }[]}
+ */
+function scanForQuestionStarts(lines, candidateRE) {
+  const starts = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(candidateRE);
+    if (!m) continue;
+    if (isQuestionFalsePositive(lines[i])) continue;
+    const num = parseInt(m[1], 10);
+    if (isInFillinSequence(lines, i, num)) continue;
+    const prev = starts[starts.length - 1];
+    // Must be in sane range and strictly one more than the previous question.
+    if (num < 1 || num > 40) continue;
+    // Cambridge papers always begin at question 1.  Requiring the very first
+    // accepted question to be Q1 prevents stray page-number headers (e.g. the
+    // page number "2" at the top of page 2) from being mistakenly accepted as
+    // the first question, which would then cause Q1 to be skipped entirely.
+    if (!prev && num !== 1) continue;
+    if (prev && num !== prev.number + 1) continue;
+    // Reject if the previous question body has fewer than MIN_LINES_PER_QUESTION
+    // non-empty lines — this filters out false positives that sit immediately
+    // after a real question header (e.g. "2 marks" on line 2 of Q1).
+    if (prev) {
+      const bodyLines = lines
+        .slice(prev.index + 1, i)
+        .filter((l) => l.trim().length > 0);
+      if (bodyLines.length < MIN_LINES_PER_QUESTION) continue;
+    }
+    starts.push({ index: i, number: num });
+  }
+  return starts;
+}
+
+/**
  * Split full-document text into individual main questions.
  *
  * Strategy:
@@ -411,33 +471,17 @@ export function splitIntoQuestions(pageTexts) {
     }
   }
 
-  const questionStarts = []; // { index: lineIndex, number: qNum }
+  // Primary pass: require bold prefix so that only genuine bold question
+  // headers (as marked by extractPageText) are accepted.
+  let questionStarts = scanForQuestionStarts(lines, QUESTION_CANDIDATE_RE);
 
-  for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(QUESTION_CANDIDATE_RE);
-    if (!m) continue;
-    if (isQuestionFalsePositive(lines[i])) continue;
-    const num = parseInt(m[1], 10);
-    if (isInFillinSequence(lines, i, num)) continue;
-    const prev = questionStarts[questionStarts.length - 1];
-    // Must be in sane range and strictly one more than the previous question.
-    if (num < 1 || num > 40) continue;
-    // Cambridge papers always begin at question 1.  Requiring the very first
-    // accepted question to be Q1 prevents stray page-number headers (e.g. the
-    // page number "2" at the top of page 2) from being mistakenly accepted as
-    // the first question, which would then cause Q1 to be skipped entirely.
-    if (!prev && num !== 1) continue;
-    if (prev && num !== prev.number + 1) continue;
-    // Reject if the previous question body has fewer than MIN_LINES_PER_QUESTION
-    // non-empty lines — this filters out false positives that sit immediately
-    // after a real question header (e.g. "2 marks" on line 2 of Q1).
-    if (prev) {
-      const bodyLines = lines
-        .slice(prev.index + 1, i)
-        .filter((l) => l.trim().length > 0);
-      if (bodyLines.length < MIN_LINES_PER_QUESTION) continue;
-    }
-    questionStarts.push({ index: i, number: num });
+  // Fallback pass: if bold-prefix detection found nothing (e.g. because the
+  // PDF uses fonts whose names don't contain "bold" in either fontFamily or
+  // fontName, so isBoldItem() returned false for every line), retry without
+  // requiring the bold prefix.  The same false-positive filters apply, so the
+  // only practical change is that plain non-bold lines are also eligible.
+  if (questionStarts.length === 0) {
+    questionStarts = scanForQuestionStarts(lines, QUESTION_CANDIDATE_FALLBACK_RE);
   }
 
   // Build question text slices
