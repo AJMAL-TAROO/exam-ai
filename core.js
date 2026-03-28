@@ -19,8 +19,19 @@ export async function loadPdf(url) {
 }
 
 /**
- * Reconstruct page text by grouping text items by y-coordinate,
- * sorting groups top→bottom, items within group left→right.
+ * Reconstruct page text by clustering text items into lines using a
+ * tolerance-based y-coordinate grouping, then sorting groups top→bottom and
+ * items within each group left→right.
+ *
+ * This is more robust than strict Math.round(y) bucketing because it
+ * tolerates small y-jitter caused by superscripts, subscripts, and
+ * multi-font lines that PDF.js may place at slightly different baselines.
+ *
+ * Lines are prefixed with one or more marker characters so that
+ * splitIntoQuestions can use them as extra signals for question detection:
+ *   BOLD_LINE_PREFIX (\x01)  — first item uses a bold font
+ *   LARGE_GAP_PREFIX (\x02)  — unusually large vertical gap above this line
+ *   LEFT_MARGIN_PREFIX (\x03) — first item starts at/near the left margin
  *
  * Inter-item gaps are measured in PDF user-space units and converted to an
  * approximate number of space characters so that table columns remain visually
@@ -31,28 +42,66 @@ export async function loadPdf(url) {
  */
 export async function extractPageText(page) {
   const content = await page.getTextContent();
-  // Group items by rounded y (viewport coords are bottom-up; use transform[5])
-  const rows = new Map();
-  for (const item of content.items) {
-    if (!item.str) continue;
-    const y = Math.round(item.transform[5]);
-    if (!rows.has(y)) rows.set(y, []);
-    rows.get(y).push(item);
+
+  // Collect items that have text content.
+  const allItems = content.items.filter((item) => item.str);
+  if (allItems.length === 0) return "";
+
+  // ── Step 1: Cluster items into lines ────────────────────────────────────
+  // Sort all items by y descending (higher y = higher on the page in PDF
+  // user-space coordinates, since y increases bottom→top).
+  const sortedByY = [...allItems].sort((a, b) => b.transform[5] - a.transform[5]);
+
+  // Group items into line clusters: start a new cluster when the y gap to
+  // the previous item exceeds Y_CLUSTER_TOLERANCE PDF units.  This is
+  // more robust than Math.round(y) for PDFs where the same visual line
+  // has items at subtly different baseline positions.
+  const lineGroups = [];
+  for (const item of sortedByY) {
+    const y = item.transform[5];
+    const last = lineGroups[lineGroups.length - 1];
+    if (!last || Math.abs(y - last.y) > Y_CLUSTER_TOLERANCE) {
+      lineGroups.push({ y, items: [item] });
+    } else {
+      last.items.push(item);
+    }
   }
-  // Sort rows top→bottom (higher y = higher on page in PDF coords)
-  const sortedRows = [...rows.entries()].sort((a, b) => b[0] - a[0]);
-  return sortedRows
-    .map(([, items]) => {
-      const sorted = items.sort((a, b) => a.transform[4] - b.transform[4]);
-      // Detect whether the first text item on this row uses a bold font.
-      // splitIntoQuestions uses this to identify question-header lines.
+
+  // ── Step 2: Compute median line spacing for large-gap detection ──────────
+  // Build the array of gaps between consecutive line group y-values.
+  const gaps = [];
+  for (let i = 1; i < lineGroups.length; i++) {
+    gaps.push(lineGroups[i - 1].y - lineGroups[i].y); // positive because sorted desc
+  }
+  gaps.sort((a, b) => a - b);
+  // Use the median gap as the "typical" line spacing.
+  const medianGap = gaps.length > 0 ? gaps[Math.floor(gaps.length / 2)] : 12;
+  const largeGapThreshold = LARGE_GAP_MULTIPLIER * medianGap;
+
+  // ── Step 3: Build line strings with prefix markers ───────────────────────
+  return lineGroups
+    .map((group, groupIdx) => {
+      // Sort items left→right by x position.
+      const sorted = group.items.sort((a, b) => a.transform[4] - b.transform[4]);
+
+      // Bold detection: first item on the line uses a bold font.
       const startsWithBold = isBoldItem(content.styles, sorted[0]);
 
-      // Reconstruct the row preserving inter-column spacing.
-      // For each adjacent pair of items we measure the pixel gap between the
-      // end of the previous item and the start of the next, then convert it to
-      // a number of space characters proportional to the average character
-      // width.  This keeps table columns legible in the extracted text.
+      // Left-margin detection: first item starts within LEFT_MARGIN_MAX_X
+      // PDF units from the left edge.  Cambridge question numbers are always
+      // placed at the left margin, so this is a reliable geometric signal.
+      const firstX = sorted[0].transform[4];
+      const isLeftMargin = firstX < LEFT_MARGIN_MAX_X;
+
+      // Large-gap detection: the vertical gap above this line is much larger
+      // than the median, indicating a section or question boundary.
+      let hasLargeGapAbove = false;
+      if (groupIdx > 0) {
+        const gapAbove = lineGroups[groupIdx - 1].y - group.y;
+        hasLargeGapAbove = gapAbove >= largeGapThreshold;
+      }
+
+      // Reconstruct the line text, preserving inter-column spacing.
       let line;
       if (sorted.length === 1) {
         line = sorted[0].str.trim();
@@ -74,9 +123,15 @@ export async function extractPageText(page) {
       }
 
       if (!line) return null;
-      // Prefix bold-starting lines so that splitIntoQuestions can identify
-      // question headers by their bold formatting.
-      return startsWithBold ? BOLD_LINE_PREFIX + line : line;
+
+      // Build the prefix string.  Order is fixed (bold, gap, margin) so that
+      // the regex patterns in splitIntoQuestions can match them reliably.
+      let prefix = "";
+      if (startsWithBold)    prefix += BOLD_LINE_PREFIX;
+      if (hasLargeGapAbove)  prefix += LARGE_GAP_PREFIX;
+      if (isLeftMargin)      prefix += LEFT_MARGIN_PREFIX;
+
+      return prefix + line;
     })
     .filter(Boolean)
     .join("\n");
@@ -113,6 +168,55 @@ const MAX_GAP_SPACES = 16;
  * formatting rather than relying on text patterns alone.
  */
 const BOLD_LINE_PREFIX = '\x01';
+
+/**
+ * Prefix prepended to a line that has an unusually large vertical gap above
+ * it (>= LARGE_GAP_MULTIPLIER × the median inter-line gap for the page).
+ * This is a geometric signal that the line may start a new section or question.
+ */
+const LARGE_GAP_PREFIX = '\x02';
+
+/**
+ * Prefix prepended to a line whose first text item starts at or near the left
+ * margin (x < LEFT_MARGIN_MAX_X PDF units).  Cambridge question numbers are
+ * always placed at the left margin, making this a reliable positional signal.
+ */
+const LEFT_MARGIN_PREFIX = '\x03';
+
+/**
+ * Maximum y-distance (PDF user-space units) between two items that are still
+ * considered part of the same line cluster.  Values ≤ 4 cover typical
+ * subscript/superscript baseline shifts without merging adjacent text rows.
+ */
+const Y_CLUSTER_TOLERANCE = 4;
+
+/**
+ * First item x-position threshold (PDF user-space units) below which a line
+ * is considered to start "at the left margin".
+ * Cambridge A4 papers have a left margin of roughly 30–40 mm ≈ 85–113 pt;
+ * question numbers appear right at that margin, so 90 pt is a safe threshold.
+ */
+const LEFT_MARGIN_MAX_X = 90;
+
+/**
+ * A vertical gap is considered "large" when it is this many times greater
+ * than the median inter-line gap for the page.  1.8× covers typical paragraph
+ * spacing while identifying genuine section/question breaks.
+ */
+const LARGE_GAP_MULTIPLIER = 1.8;
+
+/**
+ * Average character count per page below which a document is flagged as
+ * having low text coverage (likely image-heavy or scanned).
+ */
+const LOW_TEXT_CHARS_PER_PAGE = 200;
+
+/**
+ * Maximum allowed gap in the monotonically-increasing question-number
+ * sequence.  Allowing a gap of 2 means that if Q3 is missed the extractor
+ * still accepts Q4, Q5, … rather than discarding all subsequent questions.
+ */
+const MAX_QUESTION_NUMBER_GAP = 2;
 
 /**
  * Return true when the given PDF text item uses a bold font.
@@ -187,14 +291,25 @@ const NOISE_PATTERNS = [
 ];
 
 /**
+ * Strip all known prefix marker characters (\x01, \x02, \x03) from the
+ * beginning of a line.  These markers are added by extractPageText to carry
+ * formatting and geometric signals; they must be removed before content
+ * matching or display.
+ * @param {string} line
+ * @returns {string}
+ */
+function stripPrefixes(line) {
+  return line.replace(/^[\x01\x02\x03]+/, "");
+}
+
+/**
  * Remove common header/footer noise from a line.
  * Does NOT filter standalone numbers — see STANDALONE_NUMBER_RE for why.
  * @param {string} line
  * @returns {boolean} true if the line should be kept
  */
 function isContentLine(line) {
-  const plain = line.startsWith(BOLD_LINE_PREFIX) ? line.slice(BOLD_LINE_PREFIX.length) : line;
-  return !NOISE_PATTERNS.some((p) => p.test(plain));
+  return !NOISE_PATTERNS.some((p) => p.test(stripPrefixes(line)));
 }
 
 /**
@@ -204,11 +319,10 @@ function isContentLine(line) {
  * The `m` flag is intentional: raw page text is a multi-line string and we want
  * to test whether *any* line within it is a standalone blank-page declaration,
  * even if other lines (page numbers, headers) are present on the same page.
- * The leading \x01? makes the bold prefix optional: blank-page notices might
- * appear in bold (e.g. a Cambridge paper that renders "BLANK PAGE" in a bold
- * font) or in plain text, so both forms must be matched.
+ * The leading [\x01\x02\x03]* strips any combination of prefix markers that
+ * extractPageText may have prepended to the line.
  */
-const BLANK_PAGE_RE = /^\x01?\s*(blank\s+page|this\s+page\s+is\s+intentionally\s+(left\s+)?blank)\s*$/im;
+const BLANK_PAGE_RE = /^[\x01\x02\x03]*\s*(blank\s+page|this\s+page\s+is\s+intentionally\s+(left\s+)?blank)\s*$/im;
 
 /**
  * Return true when the raw page text belongs to a blank page — i.e. the page
@@ -225,14 +339,14 @@ function isBlankPage(rawPageText) {
  * Clean a page's raw text.
  * Used for subject/level keyword scanning where question numbers are irrelevant,
  * so standalone numbers are filtered out here (along with all other noise).
- * Bold-prefix markers inserted by extractPageText are stripped from each line.
+ * All prefix markers inserted by extractPageText are stripped from each line.
  * @param {string} pageText
  * @returns {string}
  */
 export function cleanPageText(pageText) {
   return pageText
     .split("\n")
-    .map((line) => line.startsWith(BOLD_LINE_PREFIX) ? line.slice(BOLD_LINE_PREFIX.length) : line)
+    .map(stripPrefixes)
     .filter((line) => isContentLine(line) && !STANDALONE_NUMBER_RE.test(line))
     .join("\n");
 }
@@ -240,13 +354,15 @@ export function cleanPageText(pageText) {
 // ─── Question splitting ───────────────────────────────────────────────────────
 
 /**
- * Regex for a *candidate* question-start line.
+ * Regex for a *candidate* question-start line (primary: bold required).
  *
  * Cambridge exam papers render question numbers in bold.  extractPageText
  * prepends BOLD_LINE_PREFIX (\x01) to every line whose first text item is
  * bold, so a genuine question header will always start with \x01.
+ * The new LARGE_GAP_PREFIX (\x02) and LEFT_MARGIN_PREFIX (\x03) may also
+ * appear after \x01, so the pattern accepts them as optional followers.
  *
- * Accepted forms (immediately after the bold prefix):
+ * Accepted forms (immediately after the prefix block):
  *   "1"           — number alone on a line (Cambridge style: number above question body)
  *   "1."          — number with trailing period, alone on a line
  *   "1 text…"     — number followed by question text on the same line
@@ -263,26 +379,34 @@ export function cleanPageText(pageText) {
  * isQuestionFalsePositive() below.
  */
 const QUESTION_CANDIDATE_RE =
-  // \x01               — bold prefix (set by extractPageText)
-  // (?:Question\s+|…)? — optional "Question " / "Q" word prefix
-  // ([1-9]\d?)         — 1- or 2-digit number, no leading zero (rejects "04")
-  // (?:…|…)            — number ends the line OR is followed by "." / space
-  // (?!\s*\d)          — NOT immediately followed by another digit (avoids e.g. "3 5 marks")
-  /^\x01(?:Question\s+|Q\.?\s*)?([1-9]\d?)(?:\s*\.?\s*$|(?:\.\s+|\s+)(?!\s*\d))/i;
+  // \x01[\x02\x03]*     — bold prefix followed by optional gap/margin prefixes
+  // (?:Question\s+|…)?  — optional "Question " / "Q" word prefix
+  // ([1-9]\d?)          — 1- or 2-digit number, no leading zero (rejects "04")
+  // (?:…|…)             — number ends the line OR is followed by "." / space
+  // (?!\s*\d)           — NOT immediately followed by another digit
+  /^\x01[\x02\x03]*(?:Question\s+|Q\.?\s*)?([1-9]\d?)(?:\s*\.?\s*$|(?:\.\s+|\s+)(?!\s*\d))/i;
 
 /**
- * Fallback regex used when bold-prefix detection yields no questions.
+ * Geometric fallback regex — used when bold-prefix detection yields nothing.
  *
- * Some PDFs use font metadata that does not include the word "bold" in either
- * the fontFamily or fontName reported by PDF.js, so isBoldItem() returns false
- * for every line and QUESTION_CANDIDATE_RE never matches.  When that happens
- * splitIntoQuestions() retries with this regex, which is identical except that
- * the bold prefix (\x01) is made optional (\x01?).  The same false-positive
- * filters and monotonic-numbering validation are applied, so the only practical
- * change is that plain (non-bold) lines are also eligible as question headers.
+ * Requires at least one geometric signal: a large-gap prefix (\x02) or a
+ * left-margin prefix (\x03), optionally combined with the bold prefix (\x01).
+ * These signals are set by extractPageText based on vertical spacing and the
+ * x-position of the first text item, providing reliable question-boundary cues
+ * even when bold font metadata is unavailable.
+ */
+const QUESTION_CANDIDATE_GEOMETRIC_RE =
+  /^\x01?(?:\x02[\x03]?|[\x02]?\x03)(?:Question\s+|Q\.?\s*)?([1-9]\d?)(?:\s*\.?\s*$|(?:\.\s+|\s+)(?!\s*\d))/i;
+
+/**
+ * Pattern-only fallback regex — last resort when no geometric signals exist.
+ *
+ * Identical to QUESTION_CANDIDATE_RE except all prefixes (\x01–\x03) are
+ * optional.  The same false-positive filters and monotonic-numbering
+ * validation still apply; the only change is that plain lines are eligible.
  */
 const QUESTION_CANDIDATE_FALLBACK_RE =
-  /^\x01?(?:Question\s+|Q\.?\s*)?([1-9]\d?)(?:\s*\.?\s*$|(?:\.\s+|\s+)(?!\s*\d))/i;
+  /^\x01?[\x02\x03]*(?:Question\s+|Q\.?\s*)?([1-9]\d?)(?:\s*\.?\s*$|(?:\.\s+|\s+)(?!\s*\d))/i;
 
 /**
  * Patterns that identify a candidate line as a false positive — i.e. it is NOT
@@ -322,8 +446,7 @@ const FALSE_POSITIVE_PATTERNS = [
  * @returns {boolean}
  */
 function isQuestionFalsePositive(line) {
-  const plain = line.startsWith(BOLD_LINE_PREFIX) ? line.slice(BOLD_LINE_PREFIX.length) : line;
-  return FALSE_POSITIVE_PATTERNS.some((re) => re.test(plain));
+  return FALSE_POSITIVE_PATTERNS.some((re) => re.test(stripPrefixes(line)));
 }
 
 /**
@@ -359,7 +482,7 @@ function isInFillinSequence(lines, i, num) {
   const end   = Math.min(lines.length, i + WINDOW + 1);
   for (let j = start; j < end; j++) {
     if (j === i) continue;
-    const plain = lines[j].startsWith(BOLD_LINE_PREFIX) ? lines[j].slice(BOLD_LINE_PREFIX.length) : lines[j];
+    const plain = stripPrefixes(lines[j]);
     const m = plain.match(/^\s*(\d+)\s+\.{3,}/);
     if (!m) continue;
     if (Math.abs(parseInt(m[1], 10) - num) <= 2) return true;
@@ -382,31 +505,36 @@ const MIN_LINES_PER_QUESTION = 2;
  * that splitIntoQuestions uses, so the result can be used directly as the
  * `questionStarts` array.
  *
- * Extracted into a helper so splitIntoQuestions can call it twice: first with
- * QUESTION_CANDIDATE_RE (bold-prefix required) and then, if no questions are
- * found, again with QUESTION_CANDIDATE_FALLBACK_RE (bold-prefix optional).
+ * Monotonic numbering allows a gap of up to MAX_QUESTION_NUMBER_GAP so that
+ * a single missed header (e.g. Q3 not detected) does not discard all later
+ * questions (Q4, Q5, … are still accepted after Q2).
  *
  * @param {string[]} lines      — flat filtered line array
  * @param {RegExp}   candidateRE — regex used to identify candidate lines
- * @returns {{ index: number, number: number }[]}
+ * @returns {{ index: number, number: number, candidatesConsidered: number }[]}
  */
 function scanForQuestionStarts(lines, candidateRE) {
   const starts = [];
+  let candidatesConsidered = 0;
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(candidateRE);
     if (!m) continue;
+    candidatesConsidered++;
     if (isQuestionFalsePositive(lines[i])) continue;
     const num = parseInt(m[1], 10);
     if (isInFillinSequence(lines, i, num)) continue;
     const prev = starts[starts.length - 1];
-    // Must be in sane range and strictly one more than the previous question.
+    // Must be in sane range.
     if (num < 1 || num > 40) continue;
     // Cambridge papers always begin at question 1.  Requiring the very first
     // accepted question to be Q1 prevents stray page-number headers (e.g. the
     // page number "2" at the top of page 2) from being mistakenly accepted as
     // the first question, which would then cause Q1 to be skipped entirely.
     if (!prev && num !== 1) continue;
-    if (prev && num !== prev.number + 1) continue;
+    // Allow a gap of up to MAX_QUESTION_NUMBER_GAP in the sequence so that
+    // a single missed question header does not cause all later questions to be
+    // discarded.  e.g. if Q3 is not detected, Q4 is still accepted after Q2.
+    if (prev && (num <= prev.number || num > prev.number + MAX_QUESTION_NUMBER_GAP)) continue;
     // Reject if the previous question body has fewer than MIN_LINES_PER_QUESTION
     // non-empty lines — this filters out false positives that sit immediately
     // after a real question header (e.g. "2 marks" on line 2 of Q1).
@@ -418,30 +546,61 @@ function scanForQuestionStarts(lines, candidateRE) {
     }
     starts.push({ index: i, number: num });
   }
+  // Attach the candidate count so callers can surface it in debugInfo.
+  starts.candidatesConsidered = candidatesConsidered;
   return starts;
+}
+
+/**
+ * Assess the text coverage of a set of page texts.
+ *
+ * Returns diagnostic information useful for detecting image-heavy or scanned
+ * PDFs where PDF.js text extraction may be insufficient for reliable question
+ * splitting.
+ *
+ * @param {string[]} pageTexts — raw page text strings (with prefix markers)
+ * @returns {{ avgCharsPerPage: number, lowTextPages: number[], isLowCoverage: boolean }}
+ */
+function assessTextCoverage(pageTexts) {
+  const charCounts = pageTexts.map((t) => {
+    // Strip prefix markers and collapse whitespace before counting.
+    const cleaned = t.replace(/[\x01\x02\x03]/g, "").replace(/\s+/g, " ").trim();
+    return cleaned.length;
+  });
+  const total = charCounts.reduce((s, c) => s + c, 0);
+  const avgCharsPerPage = pageTexts.length > 0 ? Math.round(total / pageTexts.length) : 0;
+  const lowTextPages = charCounts
+    .map((c, i) => (c < 100 ? i + 1 : null))
+    .filter((n) => n !== null);
+  const isLowCoverage = avgCharsPerPage < LOW_TEXT_CHARS_PER_PAGE;
+  return { avgCharsPerPage, lowTextPages, isLowCoverage };
 }
 
 /**
  * Split full-document text into individual main questions.
  *
- * Strategy:
+ * Strategy (three-tier fallback):
  *  1. Flatten all pages into a single line array, recording which PDF page
  *     (1-based) each line came from so we can report startPage / endPage.
- *  2. Find every bold line (prefixed with BOLD_LINE_PREFIX by extractPageText)
- *     whose first text is a question number without a leading zero (1–40).
- *     Bold formatting is the primary signal — Cambridge exam papers always
- *     render question numbers in bold.
- *  3. Accept only strictly-monotonically-increasing question numbers (1, 2, 3 …),
- *     rejecting continuation notices, fill-in sequences, and lines with fewer
- *     than MIN_LINES_PER_QUESTION non-empty body lines before the next header.
- *  4. Slice between consecutive accepted starts.  Each question ends one page
- *     before the page where the next question begins; blank pages ("BLANK PAGE")
+ *  2a. PRIMARY — require bold prefix (\x01).  Cambridge exam papers render
+ *      question numbers in bold, so this is the most precise signal.
+ *  2b. GEOMETRIC FALLBACK — require at least one geometric signal: large-gap
+ *      prefix (\x02) or left-margin prefix (\x03).  Used when bold metadata
+ *      is absent (e.g. non-standard fonts) but layout geometry is reliable.
+ *  2c. PATTERN-ONLY FALLBACK — last resort; all prefixes optional.  Used when
+ *      text coverage is too low for geometric signals to be meaningful.
+ *  3. Accept only monotonically-increasing question numbers (1, 2, 3 …) with
+ *     a tolerance of MAX_QUESTION_NUMBER_GAP so that a single missed header
+ *     does not discard all subsequent questions.
+ *  4. Slice between consecutive accepted starts.  Blank pages ("BLANK PAGE")
  *     within the range are tracked for the caller.
  *
  * @param {string[]} pageTexts — raw text per page (cleaning is applied here)
+ * @param {Object}  [outMeta]  — optional object to receive extraction metadata:
+ *   { extractionMode, candidateHeadersFound, lowTextCoverage, avgCharsPerPage }
  * @returns {{ number: number, text: string, startPage: number, endPage: number, blankPages: number[] }[]}
  */
-export function splitIntoQuestions(pageTexts) {
+export function splitIntoQuestions(pageTexts, outMeta = null) {
   // Build a flat line array and a parallel array mapping each line to its
   // 1-based source page number.
   const lines       = [];
@@ -465,23 +624,41 @@ export function splitIntoQuestions(pageTexts) {
       // the paper format.  Only drop standalone numbers from the first 3 and
       // last 3 raw lines so that question-number markers in the page body are
       // preserved (e.g. "6" alone on a line in the body is Q6's header).
-      if (STANDALONE_NUMBER_RE.test(line) && (li < 3 || li >= rawLines.length - 3)) continue;
+      if (STANDALONE_NUMBER_RE.test(stripPrefixes(line)) && (li < 3 || li >= rawLines.length - 3)) continue;
       lines.push(line);
       linePageMap.push(p + 1);
     }
   }
 
-  // Primary pass: require bold prefix so that only genuine bold question
-  // headers (as marked by extractPageText) are accepted.
-  let questionStarts = scanForQuestionStarts(lines, QUESTION_CANDIDATE_RE);
+  // Assess text coverage so we can report it in debugInfo even when no
+  // fallback is needed.
+  const coverage = assessTextCoverage(pageTexts);
 
-  // Fallback pass: if bold-prefix detection found nothing (e.g. because the
-  // PDF uses fonts whose names don't contain "bold" in either fontFamily or
-  // fontName, so isBoldItem() returned false for every line), retry without
-  // requiring the bold prefix.  The same false-positive filters apply, so the
-  // only practical change is that plain non-bold lines are also eligible.
+  // Three-tier candidate detection:
+  // Tier 1 — bold prefix (highest precision, most common for Cambridge papers)
+  let questionStarts = scanForQuestionStarts(lines, QUESTION_CANDIDATE_RE);
+  let extractionMode = "bold";
+
+  // Tier 2 — geometric signals (large-gap or left-margin), no bold required.
+  // Triggered when bold detection finds nothing.
+  if (questionStarts.length === 0) {
+    questionStarts = scanForQuestionStarts(lines, QUESTION_CANDIDATE_GEOMETRIC_RE);
+    extractionMode = "geometric";
+  }
+
+  // Tier 3 — pattern-only, no prefix required.
+  // Triggered when both bold and geometric detection find nothing.
   if (questionStarts.length === 0) {
     questionStarts = scanForQuestionStarts(lines, QUESTION_CANDIDATE_FALLBACK_RE);
+    extractionMode = "pattern-only";
+  }
+
+  // Write extraction metadata into the caller-supplied object (if any).
+  if (outMeta) {
+    outMeta.extractionMode = extractionMode;
+    outMeta.candidateHeadersFound = questionStarts.candidatesConsidered ?? 0;
+    outMeta.lowTextCoverage = coverage.isLowCoverage;
+    outMeta.avgCharsPerPage = coverage.avgCharsPerPage;
   }
 
   // Build question text slices
@@ -490,10 +667,10 @@ export function splitIntoQuestions(pageTexts) {
     const start = questionStarts[i].index;
     const end =
       i + 1 < questionStarts.length ? questionStarts[i + 1].index : lines.length;
-    // Strip bold-prefix markers before joining into the final question text.
+    // Strip all prefix markers before joining into the final question text.
     const text = lines
       .slice(start, end)
-      .map((l) => (l.startsWith(BOLD_LINE_PREFIX) ? l.slice(BOLD_LINE_PREFIX.length) : l))
+      .map(stripPrefixes)
       .join("\n")
       .trim();
     if (text.length > 10) {
@@ -513,7 +690,7 @@ export function splitIntoQuestions(pageTexts) {
       questions.push({
         number: questionStarts[i].number,
         text,
-        matchedLine: lines[start].startsWith(BOLD_LINE_PREFIX) ? lines[start].slice(BOLD_LINE_PREFIX.length) : lines[start],
+        matchedLine: stripPrefixes(lines[start]),
         startPage,
         endPage,
         blankPages,
@@ -696,6 +873,10 @@ export function tagTopicsDebug(questionText, topics) {
  * @property {string} matchedLine  — the raw text line that triggered question detection
  * @property {TopicScore[]} topicScores — all topics with their keyword scores
  * @property {string[]} subParts — sub-part labels found in the question (e.g. ["a","b","i","ii"])
+ * @property {'bold'|'geometric'|'pattern-only'} extractionMode — which detection tier was used
+ * @property {number} candidateHeadersFound — total candidate lines considered before filtering
+ * @property {boolean} lowTextCoverage — true when avg chars/page was below threshold
+ * @property {number} avgCharsPerPage — average extractable characters per page for this PDF
  */
 
 /**
@@ -732,7 +913,9 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
     try {
       const pdfDoc = await loadPdf(url);
       const rawPages = await extractAllPagesText(pdfDoc);
-      const questions = splitIntoQuestions(rawPages);
+      // Capture extraction metadata (mode, candidate count, coverage) for debugInfo.
+      const extractionMeta = {};
+      const questions = splitIntoQuestions(rawPages, extractionMeta);
       for (const q of questions) {
         const key = `${url}||${q.number}`;
         if (seenKeys.has(key)) continue;
@@ -747,9 +930,13 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
           endPage:   q.endPage,
           blankPages: q.blankPages ?? [],
           debugInfo: {
-            matchedLine: q.matchedLine,
-            topicScores: debugResult.topicScores,
-            subParts:    debugResult.subParts,
+            matchedLine:           q.matchedLine,
+            topicScores:           debugResult.topicScores,
+            subParts:              debugResult.subParts,
+            extractionMode:        extractionMeta.extractionMode        ?? "bold",
+            candidateHeadersFound: extractionMeta.candidateHeadersFound ?? 0,
+            lowTextCoverage:       extractionMeta.lowTextCoverage       ?? false,
+            avgCharsPerPage:       extractionMeta.avgCharsPerPage       ?? 0,
           },
         });
       }

@@ -93,24 +93,67 @@ exam-ai/
 ## How It Works
 
 ### PDF text extraction
-PDF.js (loaded via CDN ESM) renders each page's text items. Items are grouped
-by their `y`-coordinate and sorted left→right within each row to reconstruct
-natural reading order.
+PDF.js (loaded via CDN ESM) renders each page's text items. Items are clustered
+into lines using a **tolerance-based y-coordinate grouping** (items within 4 PDF
+units of each other are placed on the same line) rather than a simple integer
+round, which reduces fragmentation caused by subscripts, superscripts, and
+multi-font rows. Items within each line are sorted left→right.
+
+Each extracted line may be prefixed with one or more marker characters that
+carry additional signals to the question-detection logic:
+
+| Marker | Meaning |
+|--------|---------|
+| `\x01` | First item is **bold** (from font metadata) |
+| `\x02` | Line has a **large vertical gap** above it (≥ 1.8× median line spacing) |
+| `\x03` | First item starts at the **left margin** (x < 90 PDF units) |
+
+These markers are stripped before any text is displayed or exported.
 
 ### Header / footer cleaning
 Common Cambridge boilerplate is stripped before question splitting:
 `Turn over`, `© UCLES`, paper codes, blank page notices, standalone page
 numbers, etc.
 
-### Question splitting
-A regex matches main question starts of the form:
+### Question splitting — three-tier detection
+Question headers are detected using a three-tier fallback strategy so that
+papers with non-standard font metadata still produce correct results:
+
+1. **Bold mode** *(primary)*: requires the bold marker (`\x01`).  Most
+   Cambridge papers render question numbers in bold, making this the most
+   precise signal.
+2. **Geometric mode** *(fallback)*: requires at least one geometric marker
+   — large vertical gap (`\x02`) or left-margin position (`\x03`).  Used
+   when bold font metadata is absent (e.g. non-standard or embedded fonts)
+   but layout geometry is reliable.
+3. **Pattern-only mode** *(last resort)*: all markers optional; matches any
+   line that looks like a question header by text pattern alone.
+
+In all modes the regex matches forms like:
 
 ```
 Q1   Q 1   Question 1   1   (followed by text, not a sub-part)
 ```
 
-Question numbers must be monotonically increasing (1, 2, 3 …) to prevent
-false positives from figures or sub-parts.
+Question numbers must be **monotonically increasing** (1, 2, 3 …).  A gap of
+up to 2 is allowed, so if a single question header is missed the remaining
+questions (e.g. Q4 after Q2) are still extracted rather than being discarded.
+
+False-positive guards (mark allocations, units, dotted fill-ins, continuation
+notices) and the minimum-body-length filter remain active in all modes.
+
+### Low-text-coverage detection
+Each indexed PDF is assessed for text coverage.  If the average extractable
+character count falls below 200 characters/page the PDF is flagged as
+**low-coverage** (likely image-heavy or scanned).  This flag is surfaced in
+the per-question AI debug panel together with the average characters/page so
+you can quickly identify papers that need attention.
+
+### Extraction mode reporting
+The AI debug panel (expandable under each question) now shows:
+- **Extraction mode** — which tier (bold / geometric / pattern-only) was used
+- **Candidate headers found** — how many lines were considered before filtering
+- **Text coverage** — whether the source PDF had adequate extractable text
 
 ### Topic tagging
 Each question is scored against a keyword list for every topic in the syllabus.
@@ -164,10 +207,18 @@ Chrome 61+, Firefox 60+, Safari 11+, Edge 79+.
 
 ## Limitations
 
-- Only **text-based** PDFs are supported. Scanned image PDFs will produce no
-  questions.
-- Question extraction relies on Cambridge-style numbering (`Q1`, `Question 1`).
+- **Scanned/image PDFs** will produce few or no questions because PDF.js can
+  only extract text that is embedded in the PDF as actual text objects.  The
+  app detects this situation and reports it as "low text coverage" in the debug
+  panel, but it cannot recover question text from rendered images without an
+  OCR engine (not included — keeping the app fully client-side and
+  dependency-free).
+- Question extraction relies on Cambridge-style numbering (`Q1`, `Question 1`,
+  or a standalone `1` at the left margin in bold or with a large gap above).
   Papers with non-standard formats may not parse correctly.
+- Geometric signals (left-margin position and vertical gap) are heuristics
+  tuned for Cambridge A4 papers.  Papers with unusual layouts may require
+  threshold adjustments in `core.js` (`LEFT_MARGIN_MAX_X`, `LARGE_GAP_MULTIPLIER`).
 - The CDN for PDF.js requires an internet connection. For fully offline use,
   download the PDF.js dist files and update the `<script>` src in `index.html`.
 - PDF files served from a different origin must allow CORS. Hosting PDFs in the
