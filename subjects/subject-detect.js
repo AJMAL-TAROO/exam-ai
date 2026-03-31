@@ -6,6 +6,8 @@
  * export detectLevel(pageText: string): 'o-level' | 'a-level' | null
  */
 
+import { kwMatches } from "../core.js";
+
 /** Keyword sets for subject detection. */
 const SUBJECT_KEYWORDS = {
   maths: [
@@ -42,17 +44,16 @@ const LEVEL_KEYWORDS = {
 };
 
 /**
- * Score a text against a keyword list (case-insensitive substring matching).
+ * Score a text against a keyword list (case-insensitive whole-word matching).
  * @param {string} text
  * @param {string[]} keywords
  * @returns {number}
  */
 function scoreKeywords(text, keywords) {
-  const lower = text.toLowerCase();
   return keywords.reduce((score, kw) => {
     // Weight multi-word phrases higher than single words
     const weight = kw.includes(" ") ? 3 : 1;
-    return score + (lower.includes(kw.toLowerCase()) ? weight : 0);
+    return score + (kwMatches(text, kw) ? weight : 0);
   }, 0);
 }
 
