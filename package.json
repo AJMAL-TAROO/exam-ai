@@ -4,6 +4,6 @@
   "description": "Randomized past-paper generator",
   "type": "module",
   "scripts": {
-    "test": "node tests/topicScorer.test.js"
+    "test": "node tests/topicScorer.test.js && node tests/keywordMatching.test.js"
   }
 }

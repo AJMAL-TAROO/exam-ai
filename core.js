@@ -735,8 +735,53 @@ function extractSubParts(questionText) {
 }
 
 /**
+ * Normalize hyphens and underscores to spaces so that, for example,
+ * "graph-based" and "graph_theory" are treated as "graph based" and
+ * "graph theory" when matching.
+ *
+ * @param {string} s
+ * @returns {string}
+ */
+function normalizeForMatch(s) {
+  return s.replace(/[-_]/g, " ");
+}
+
+/**
+ * Check whether a keyword appears in text as a whole word or phrase rather
+ * than as a bare substring.
+ *
+ * - Single-word keywords are matched at word boundaries (\b…\b), so
+ *   "graph" will not match inside "photographer".
+ * - Multi-word phrases are matched at phrase boundaries with flexible
+ *   internal whitespace, so "linked list" matches "linked-list" after
+ *   normalization and also "linked  list" with extra spaces.
+ * - Both text and keyword have hyphens/underscores normalized to spaces
+ *   before matching, so "graph-based" in the text matches keyword "graph".
+ * - Punctuation adjacent to a token is handled naturally by \b
+ *   (e.g., "graph," "graph." "(graph)" all match keyword "graph").
+ * - Matching is case-insensitive.
+ *
+ * @param {string} text — text to search (any case)
+ * @param {string} kw   — keyword to find (any case)
+ * @returns {boolean}
+ */
+export function kwMatches(text, kw) {
+  const normText = normalizeForMatch(text.toLowerCase());
+  const normKw   = normalizeForMatch(kw.toLowerCase());
+  if (normKw.includes(" ")) {
+    // Multi-word phrase: allow flexible whitespace between words.
+    const words   = normKw.split(/\s+/).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const pattern = "\\b" + words.join("\\s+") + "\\b";
+    return new RegExp(pattern).test(normText);
+  } else {
+    const escaped = normKw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp("\\b" + escaped + "\\b").test(normText);
+  }
+}
+
+/**
  * Return the first element of `lines` that contains `kwLower`
- * (case-insensitive), truncated to 100 characters.
+ * as a whole word or phrase (case-insensitive), truncated to 100 characters.
  * Returns an empty string if not found.
  *
  * @param {string[]} lines — pre-split lines (original case)
@@ -745,7 +790,7 @@ function extractSubParts(questionText) {
  */
 function findContextLine(lines, kwLower) {
   for (const line of lines) {
-    if (line.toLowerCase().includes(kwLower)) {
+    if (kwMatches(line, kwLower)) {
       const t = line.trim();
       return t.length > 100 ? t.slice(0, 100) + "…" : t;
     }
@@ -800,8 +845,8 @@ function scoreTopics(questionText, topics) {
       const kwLower    = kw.toLowerCase();
       const baseWeight = kw.includes(" ") ? MULTI_WORD_WEIGHT : SINGLE_WORD_WEIGHT;
 
-      const inMain = mainText.includes(kwLower);
-      const inSub  = !inMain && subText.includes(kwLower);
+      const inMain = kwMatches(mainText, kwLower);
+      const inSub  = !inMain && kwMatches(subText, kwLower);
 
       if (inMain) {
         score += baseWeight * MAIN_BODY_MULTIPLIER;
