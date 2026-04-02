@@ -595,6 +595,45 @@
       font-size: 0.72rem;
     }
 
+    /* Keywords column in the report table */
+    .report-kw-cell {
+      line-height: 1.9;
+    }
+
+    /* ── Per-PDF question cards (mobile stacked layout) ───── */
+    .pdf-report-cards {
+      display: none; /* shown only on mobile via media query */
+      flex-direction: column;
+      gap: 0.6rem;
+      margin-top: 0.5rem;
+    }
+    .report-q-card {
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      padding: 0.65rem 0.75rem;
+      background: var(--color-bg);
+      font-size: 0.8rem;
+    }
+    .report-q-card-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.3rem;
+      align-items: baseline;
+      flex-wrap: wrap;
+    }
+    .report-q-card-row:last-child { margin-bottom: 0; }
+    .report-q-card-label {
+      font-weight: 600;
+      color: var(--color-muted);
+      min-width: 5.5rem;
+      flex-shrink: 0;
+      font-size: 0.75rem;
+    }
+    .report-q-card-value {
+      color: var(--color-text);
+      flex: 1;
+    }
+
     /* ── Footer ───────────────────────────────────────────── */
     footer {
       text-align: center;
@@ -609,6 +648,12 @@
       .card { padding: 1rem; }
       .form-row { flex-direction: column; }
       .question-source { display: none; }
+    }
+
+    /* Switch per-PDF report from table → cards on small screens */
+    @media (max-width: 700px) {
+      .pdf-topic-table { display: none; }
+      .pdf-report-cards { display: flex; }
     }
   </style>
 </head>

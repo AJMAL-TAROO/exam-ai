@@ -27,6 +27,11 @@ const state = {
   topics: [],           // current topic list
 };
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+/** Maximum characters shown in the question preview inside the index report. */
+const MAX_PREVIEW_LENGTH = 120;
+
 // ─── DOM refs ─────────────────────────────────────────────────────────────────
 
 const $ = (id) => document.getElementById(id);
@@ -289,7 +294,8 @@ function renderPdfSelector() {
 
 /**
  * After indexing, render a per-PDF summary (question count) and a per-question
- * → topic table for each selected PDF.
+ * report for each selected PDF.  On desktop a table is shown; on mobile the
+ * same data is rendered as stacked cards (CSS toggles which is visible).
  */
 function renderPdfReport() {
   const reportEl = $("pdf-report");
@@ -331,48 +337,94 @@ function renderPdfReport() {
     entry.appendChild(count);
 
     if (questions.length > 0) {
-      const table = document.createElement("table");
-      table.className = "pdf-topic-table";
-
-      table.innerHTML = `
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Question preview</th>
-            <th>Assigned topic</th>
-            <th>Pages</th>
-          </tr>
-        </thead>
-      `;
-
-      const tbody = document.createElement("tbody");
-      questions.forEach((q, idx) => {
+      // Pre-compute row data once to avoid duplicating logic
+      const rows = questions.map((q, idx) => {
         const assignedId = (q.topics && q.topics[0]) || "unclassified";
         const assignedLabel = topicLabelMap.get(assignedId) || assignedId;
 
-        const preview = (q.text || "").replace(/\s+/g, " ").trim().slice(0, 120);
-        const previewText = preview.length < (q.text || "").trim().length
-          ? preview + "…"
-          : preview;
+        const rawText = (q.text || "").replace(/\s+/g, " ").trim();
+        const preview = rawText.length > MAX_PREVIEW_LENGTH ? rawText.slice(0, MAX_PREVIEW_LENGTH) + "…" : rawText;
 
         const sp = q.startPage ?? "";
         const ep = q.endPage ?? sp;
-        const pageRange = sp
-          ? (ep && ep !== sp ? `${sp}–${ep}` : `${sp}`)
-          : "—";
+        const pageRange = sp ? (ep && ep !== sp ? `${sp}–${ep}` : `${sp}`) : "—";
 
+        // Triggered keywords: find the topic score entry for the assigned topic
+        const topicScores = q.debugInfo?.topicScores ?? [];
+        const matchingScore = topicScores.find((ts) => ts.id === assignedId);
+        const keywords = matchingScore?.matchedKeywords ?? [];
+        const keywordsHtml = keywords.length > 0
+          ? keywords.map(renderKeywordBadge).join(" ")
+          : `<span class="ai-debug-muted">—</span>`;
+
+        return { num: idx + 1, preview, assignedLabel, pageRange, keywordsHtml };
+      });
+
+      // ── Desktop: standard HTML table ──────────────────────────────────────
+      const table = document.createElement("table");
+      table.className = "pdf-topic-table";
+
+      const thead = document.createElement("thead");
+      thead.innerHTML = `
+        <tr>
+          <th>#</th>
+          <th>Question preview</th>
+          <th>Assigned topic</th>
+          <th>Pages</th>
+          <th>Keywords triggered</th>
+        </tr>
+      `;
+
+      const tbody = document.createElement("tbody");
+      rows.forEach(({ num, preview, assignedLabel, pageRange, keywordsHtml }) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td>${idx + 1}</td>
-          <td>${escapeHtml(previewText)}</td>
-          <td><span class="topic-badge">${escapeHtml(assignedLabel)}</span></td>
-          <td style="white-space:nowrap">${escapeHtml(pageRange)}</td>
+          <td data-label="#">${num}</td>
+          <td data-label="Question">${escapeHtml(preview)}</td>
+          <td data-label="Topic"><span class="topic-badge">${escapeHtml(assignedLabel)}</span></td>
+          <td data-label="Pages" style="white-space:nowrap">${escapeHtml(pageRange)}</td>
+          <td data-label="Keywords" class="report-kw-cell">${keywordsHtml}</td>
         `;
         tbody.appendChild(tr);
       });
 
+      table.appendChild(thead);
       table.appendChild(tbody);
       entry.appendChild(table);
+
+      // ── Mobile: stacked cards (one card per question) ──────────────────────
+      const cardList = document.createElement("div");
+      cardList.className = "pdf-report-cards";
+
+      rows.forEach(({ num, preview, assignedLabel, pageRange, keywordsHtml }) => {
+        const card = document.createElement("div");
+        card.className = "report-q-card";
+        card.innerHTML = `
+          <div class="report-q-card-row">
+            <span class="report-q-card-label">#</span>
+            <span class="report-q-card-value">${num}</span>
+          </div>
+          <div class="report-q-card-row">
+            <span class="report-q-card-label">Question</span>
+            <span class="report-q-card-value">${escapeHtml(preview)}</span>
+          </div>
+          <div class="report-q-card-row">
+            <span class="report-q-card-label">Topic</span>
+            <span class="report-q-card-value"><span class="topic-badge">${escapeHtml(assignedLabel)}</span></span>
+          </div>
+          <div class="report-q-card-row">
+            <span class="report-q-card-label">Pages</span>
+            <span class="report-q-card-value">${escapeHtml(pageRange)}</span>
+          </div>
+          <div class="report-q-card-row">
+            <span class="report-q-card-label">Keywords</span>
+            <span class="report-q-card-value report-kw-cell">${keywordsHtml}</span>
+          </div>
+        `;
+        cardList.appendChild(card);
+      });
+
+      entry.appendChild(cardList);
     }
 
     reportEl.appendChild(entry);
