@@ -657,6 +657,41 @@ export function splitIntoQuestions(pageTexts, outMeta = null) {
     extractionMode = "pattern-only";
   }
 
+  // Geometric-mode supplement: some question headers may lack \x02/\x03 even
+  // though their sibling headers in the same paper do carry those markers (e.g.
+  // Q4's x-coordinate is slightly outside LEFT_MARGIN_MAX_X so it never gets
+  // \x03).  After the initial geometric scan has established Q1 as an anchor,
+  // do a second left-to-right pass that admits pattern-only matches
+  // (QUESTION_CANDIDATE_FALLBACK_RE) whenever they:
+  //   • come after all currently-accepted starts (index and number must be
+  //     strictly greater than the last accepted entry),
+  //   • continue the monotonic sequence within MAX_QUESTION_NUMBER_GAP, and
+  //   • are preceded by at least MIN_LINES_PER_QUESTION non-empty body lines.
+  // Bold mode and pattern-only mode are intentionally unaffected.
+  if (extractionMode === "geometric" && questionStarts.length > 0) {
+    const alreadyAccepted = new Set(questionStarts.map((s) => s.index));
+    for (let i = 0; i < lines.length; i++) {
+      if (alreadyAccepted.has(i)) continue;
+      const m = lines[i].match(QUESTION_CANDIDATE_FALLBACK_RE);
+      if (!m) continue;
+      if (isQuestionFalsePositive(lines[i])) continue;
+      const num = parseInt(m[1], 10);
+      if (num < 1 || num > 40) continue;
+      if (isInFillinSequence(lines, i, num)) continue;
+      // Only append: the candidate must come after every already-accepted start.
+      const lastAccepted = questionStarts[questionStarts.length - 1];
+      if (i <= lastAccepted.index) continue;
+      if (num <= lastAccepted.number || num > lastAccepted.number + MAX_QUESTION_NUMBER_GAP) continue;
+      const bodyLines = lines
+        .slice(lastAccepted.index + 1, i)
+        .filter((l) => l.trim().length > 0);
+      if (bodyLines.length < MIN_LINES_PER_QUESTION) continue;
+      questionStarts.push({ index: i, number: num });
+      alreadyAccepted.add(i);
+      // questionStarts remains sorted by index because i > lastAccepted.index.
+    }
+  }
+
   // Write extraction metadata into the caller-supplied object (if any).
   if (outMeta) {
     outMeta.extractionMode = extractionMode;
