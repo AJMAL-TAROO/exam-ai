@@ -110,7 +110,7 @@ carry additional signals to the question-detection logic:
 |--------|---------|
 | `\x01` | First item is **bold** (from font metadata) |
 | `\x02` | Line has a **large vertical gap** above it (≥ 1.8× median line spacing) |
-| `\x03` | First item starts at the **left margin** (x < 90 PDF units) |
+| `\x03` | First item starts at the **left margin** (x < 120 PDF units) |
 
 These markers are stripped before any text is displayed or exported.
 
