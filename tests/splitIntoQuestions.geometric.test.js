@@ -150,6 +150,59 @@ test("left-margin prefix alone (no bold, no large-gap) is sufficient to trigger 
   );
 });
 
+test("geometric mode splits Q4 that lacks \\x02/\\x03 prefix when Q1–Q3 use \\x03", () => {
+  // Simulates the real-world case: Q1–Q3 carry the left-margin prefix (\x03) so
+  // geometric tier is selected, but Q4's header line has NO geometric prefix at
+  // all (e.g. its x-coordinate fell outside LEFT_MARGIN_MAX_X in the PDF).
+  // The geometric-mode supplement pass must still detect "4 K2 Mountain Guiding"
+  // as a question boundary because it matches QUESTION_CANDIDATE_FALLBACK_RE and
+  // continues the monotonic sequence 1 → 2 → 3 → 4.
+  const pageTexts = [
+    [
+      "\x031 A factory makes chocolate bars",
+      "The factory runs three production lines simultaneously",
+      "Each line produces a different variety of chocolate",
+      "\x032 State what is meant by a relational database model",
+      "A relational database organises data into tables",
+      "Tables are related using foreign-key constraints",
+      "\x033 The table shows part of the instruction set for a processor",
+      "The processor uses two-address instructions",
+      "Each instruction has an opcode and two operands",
+      // Q4 header deliberately has NO \x02 or \x03 prefix:
+      "4 K2 Mountain Guiding is a company that organises guided climbs",
+      "The company keeps records of climbers and their bookings",
+      "Describe the structure of a relational database suitable for this purpose",
+    ].join("\n"),
+  ];
+
+  const meta = {};
+  const questions = splitIntoQuestions(pageTexts, meta);
+
+  assert.equal(
+    meta.extractionMode,
+    "geometric",
+    `Expected extractionMode to be "geometric", got "${meta.extractionMode}"`
+  );
+
+  const q3 = questions.find((q) => q.number === 3);
+  const q4 = questions.find((q) => q.number === 4);
+
+  assert.ok(q3, "Question 3 should be detected");
+  assert.ok(q4, "Question 4 should be detected as a separate question even without a geometric prefix");
+
+  // Q3 must not swallow Q4's content.
+  assert.ok(
+    !q3.text.toLowerCase().includes("k2 mountain"),
+    `Q3 text must not include Q4 content ("k2 mountain"), got: ${q3.text}`
+  );
+
+  // Q4 must contain its own header and body content.
+  assert.ok(
+    q4.text.toLowerCase().includes("k2 mountain"),
+    `Q4 text must include "k2 mountain", got: ${q4.text}`
+  );
+});
+
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} test(s): ${passed} passed, ${failed} failed\n`);
