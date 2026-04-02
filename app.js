@@ -21,6 +21,7 @@ const state = {
   subject: null,        // 'maths' | 'physics' | 'computer-science'
   allUrls: [],          // all URLs from manifest for chosen level
   matchedUrls: [],      // filtered URLs after scanning
+  selectedPdfUrls: [],  // user-selected subset of matchedUrls for indexing
   questionIndex: [],    // built index
   manifest: null,       // loaded manifest.json
   topics: [],           // current topic list
@@ -78,6 +79,7 @@ function onLevelChange(e) {
   state.level = e.target.value || null;
   state.subject = null;
   state.matchedUrls = [];
+  state.selectedPdfUrls = [];
   state.questionIndex = [];
 
   // Reset subject selector
@@ -90,6 +92,9 @@ function onLevelChange(e) {
   hideSection("generate-section");
   hideSection("paper-section");
 
+  // Clear PDF selector + report
+  resetPdfSelectorAndReport();
+
   if (state.level) {
     showSection("subject-section");
   } else {
@@ -100,11 +105,15 @@ function onLevelChange(e) {
 function onSubjectChange(e) {
   state.subject = e.target.value || null;
   state.matchedUrls = [];
+  state.selectedPdfUrls = [];
   state.questionIndex = [];
 
   hideSection("index-section");
   hideSection("generate-section");
   hideSection("paper-section");
+
+  // Clear PDF selector + report
+  resetPdfSelectorAndReport();
 
   if (state.subject && state.level) {
     showSection("scan-section");
@@ -122,6 +131,9 @@ async function onScanClick() {
   hideSection("index-section");
   hideSection("generate-section");
   hideSection("paper-section");
+
+  // Clear any previous PDF selector and report
+  resetPdfSelectorAndReport();
 
   try {
     const manifest = await loadManifest();
@@ -162,6 +174,7 @@ async function onScanClick() {
         `✓ Matched ${state.matchedUrls.length} PDF(s) for ${subjectKey} (${levelKey}).`,
         "success"
       );
+      renderPdfSelector();
       showSection("index-section");
     }
   } catch (err) {
@@ -174,17 +187,41 @@ async function onScanClick() {
 // ─── Step 4: Build Index ──────────────────────────────────────────────────────
 
 async function onBuildIndexClick() {
+  // Derive selected URLs from checked checkboxes.
+  // If the selector was not rendered (no matched PDFs yet), fall back to all matched URLs.
+  const selectorVisible = !$("pdf-selector").hidden;
+  const checkedBoxes = document.querySelectorAll(".pdf-cb:checked");
+
+  if (selectorVisible && checkedBoxes.length === 0) {
+    setStatus("index", "Please select at least one PDF to index.", "warn");
+    return;
+  }
+
+  state.selectedPdfUrls = selectorVisible
+    ? [...checkedBoxes].map((cb) => cb.value)
+    : [...state.matchedUrls];
+
+  if (state.selectedPdfUrls.length === 0) {
+    setStatus("index", "Please select at least one PDF to index.", "warn");
+    return;
+  }
+
   setLoading("build-index-btn", true);
   setStatus("index", "Building question index…");
   hideSection("generate-section");
   hideSection("paper-section");
+
+  // Clear previous report
+  const reportEl = $("pdf-report");
+  reportEl.innerHTML = "";
+  reportEl.hidden = true;
 
   state.topics = getTopics();
   state.questionIndex = [];
 
   try {
     state.questionIndex = await buildIndex(
-      state.matchedUrls,
+      state.selectedPdfUrls,
       state.topics,
       (done, total, url) => {
         const name = url ? url.split("/").pop() : "";
@@ -197,10 +234,11 @@ async function onBuildIndexClick() {
     } else {
       setStatus(
         "index",
-        `✓ Indexed ${state.questionIndex.length} question(s) from ${state.matchedUrls.length} PDF(s).`,
+        `✓ Indexed ${state.questionIndex.length} question(s) from ${state.selectedPdfUrls.length} PDF(s).`,
         "success"
       );
       buildTopicCheckboxes();
+      renderPdfReport();
       showSection("generate-section");
     }
   } catch (err) {
@@ -208,6 +246,139 @@ async function onBuildIndexClick() {
     console.error(err);
   }
   setLoading("build-index-btn", false);
+}
+
+// ─── PDF selector helpers ─────────────────────────────────────────────────────
+
+/** Clear the PDF selector list and any previously rendered per-PDF report. */
+function resetPdfSelectorAndReport() {
+  const selectorEl = $("pdf-selector");
+  const listEl = $("pdf-checkbox-list");
+  const reportEl = $("pdf-report");
+  if (selectorEl) selectorEl.hidden = true;
+  if (listEl) listEl.innerHTML = "";
+  if (reportEl) { reportEl.innerHTML = ""; reportEl.hidden = true; }
+  state.selectedPdfUrls = [];
+}
+
+/**
+ * Build the PDF checkbox list inside #pdf-selector from state.matchedUrls.
+ * All PDFs are checked by default.
+ */
+function renderPdfSelector() {
+  const listEl = $("pdf-checkbox-list");
+  listEl.innerHTML = "";
+
+  state.matchedUrls.forEach((url) => {
+    const label = document.createElement("label");
+    label.className = "pdf-checkbox-label";
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = url;
+    cb.checked = true;
+    cb.className = "pdf-cb";
+
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(" " + url.split("/").pop()));
+    listEl.appendChild(label);
+  });
+
+  $("pdf-selector").hidden = false;
+}
+
+/**
+ * After indexing, render a per-PDF summary (question count) and a per-question
+ * → topic table for each selected PDF.
+ */
+function renderPdfReport() {
+  const reportEl = $("pdf-report");
+  reportEl.innerHTML = "";
+
+  // Build a lookup map: url → questions[]
+  const byPdf = new Map();
+  state.selectedPdfUrls.forEach((url) => byPdf.set(url, []));
+  state.questionIndex.forEach((q) => {
+    if (byPdf.has(q.pdfUrl)) {
+      byPdf.get(q.pdfUrl).push(q);
+    }
+  });
+
+  // Build a topic id → label lookup
+  const topicLabelMap = new Map(state.topics.map((t) => [t.id, t.label]));
+
+  const heading = document.createElement("h3");
+  heading.style.cssText = "margin:0 0 0.75rem; font-size:0.95rem; font-weight:600;";
+  heading.textContent = "Per-PDF Summary";
+  reportEl.appendChild(heading);
+
+  state.selectedPdfUrls.forEach((url) => {
+    const questions = byPdf.get(url) || [];
+    const filename = url.split("/").pop();
+
+    const entry = document.createElement("div");
+    entry.className = "pdf-report-entry";
+
+    const title = document.createElement("p");
+    title.className = "pdf-report-title";
+    title.textContent = filename;
+
+    const count = document.createElement("p");
+    count.className = "pdf-report-count";
+    count.textContent = `${questions.length} question(s) indexed`;
+
+    entry.appendChild(title);
+    entry.appendChild(count);
+
+    if (questions.length > 0) {
+      const table = document.createElement("table");
+      table.className = "pdf-topic-table";
+
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Question preview</th>
+            <th>Assigned topic</th>
+            <th>Pages</th>
+          </tr>
+        </thead>
+      `;
+
+      const tbody = document.createElement("tbody");
+      questions.forEach((q, idx) => {
+        const assignedId = (q.topics && q.topics[0]) || "unclassified";
+        const assignedLabel = topicLabelMap.get(assignedId) || assignedId;
+
+        const preview = (q.text || "").replace(/\s+/g, " ").trim().slice(0, 120);
+        const previewText = preview.length < (q.text || "").trim().length
+          ? preview + "…"
+          : preview;
+
+        const sp = q.startPage ?? "";
+        const ep = q.endPage ?? sp;
+        const pageRange = sp
+          ? (ep && ep !== sp ? `${sp}–${ep}` : `${sp}`)
+          : "—";
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${idx + 1}</td>
+          <td>${escapeHtml(previewText)}</td>
+          <td><span class="topic-badge">${escapeHtml(assignedLabel)}</span></td>
+          <td style="white-space:nowrap">${escapeHtml(pageRange)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(tbody);
+      entry.appendChild(table);
+    }
+
+    reportEl.appendChild(entry);
+  });
+
+  reportEl.hidden = false;
 }
 
 // ─── Topic checkboxes ─────────────────────────────────────────────────────────
@@ -628,6 +799,14 @@ function init() {
 
   // Scan
   $("scan-btn").addEventListener("click", onScanClick);
+
+  // PDF selector — Select all / Deselect all
+  $("pdf-select-all").addEventListener("click", () => {
+    document.querySelectorAll(".pdf-cb").forEach((cb) => { cb.checked = true; });
+  });
+  $("pdf-deselect-all").addEventListener("click", () => {
+    document.querySelectorAll(".pdf-cb").forEach((cb) => { cb.checked = false; });
+  });
 
   // Build index
   $("build-index-btn").addEventListener("click", onBuildIndexClick);
