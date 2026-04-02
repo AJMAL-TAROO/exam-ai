@@ -686,7 +686,17 @@ export function splitIntoQuestions(pageTexts, outMeta = null) {
       } else {
         endPage = linePageMap[end - 1] ?? startPage;
       }
-      // Collect blank pages that fall within this question's page range.
+      // Clamp endPage if a detected blank page occurs within (startPage, endPage].
+      // A blank page is a hard boundary between questions; a single question
+      // must not span across it.
+      let earliestBlank = Infinity;
+      for (const p of blankPageNums) {
+        if (p > startPage && p <= endPage && p < earliestBlank) earliestBlank = p;
+      }
+      if (earliestBlank !== Infinity) {
+        endPage = Math.max(startPage, earliestBlank - 1);
+      }
+      // Collect blank pages that fall within this question's FINAL page range.
       const blankPages = [...blankPageNums].filter((p) => p >= startPage && p <= endPage);
       questions.push({
         number: questionStarts[i].number,
