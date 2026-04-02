@@ -122,6 +122,73 @@ test("blank page at the very start (page 1) does not affect questions starting l
   assert.deepEqual(q1.blankPages, [], "Q1 should have no blank pages in its range");
 });
 
+// ─── Text content respects blank-page clamping ────────────────────────────────
+
+console.log("\nText content attribution after blank-page clamping");
+
+test("Q1 text does not include Q2-only content when a blank page separates them", () => {
+  // Page 1: Q1 content about chocolate factories (2 body lines to pass
+  //         MIN_LINES_PER_QUESTION so that Q2's header is accepted)
+  // Page 2: blank page
+  // Page 3: Q2 content about relational databases
+  // Q1's text must NOT contain "relational database" (a Q2-only phrase).
+  const pageTexts = [
+    "\x011 A factory makes chocolate bars\nChocolate production requires cocoa beans\nThe beans are processed and moulded",
+    "BLANK PAGE",
+    "\x012 State what is meant by a relational database model\nA relational database stores data in tables\nTables are linked by foreign keys",
+  ];
+
+  const questions = splitIntoQuestions(pageTexts);
+
+  const q1 = questions.find((q) => q.number === 1);
+  const q2 = questions.find((q) => q.number === 2);
+
+  assert.ok(q1, "Q1 should be detected");
+  assert.ok(q2, "Q2 should be detected");
+
+  assert.ok(
+    !q1.text.toLowerCase().includes("relational database"),
+    `Q1 text must not contain Q2-only phrase "relational database", got: ${q1.text}`
+  );
+  assert.ok(
+    q2.text.toLowerCase().includes("relational database"),
+    `Q2 text must contain "relational database", got: ${q2.text}`
+  );
+  assert.ok(
+    q1.text.toLowerCase().includes("chocolate"),
+    `Q1 text must still contain its own content "chocolate", got: ${q1.text}`
+  );
+});
+
+test("both questions are independently extractable when each has distinct topic keywords", () => {
+  // Q1 is about chocolate/factories; Q2 is about relational databases.
+  // After the fix both should be detected as separate questions with
+  // their own distinct content – neither absorbs the other.
+  const pageTexts = [
+    "\x011 A factory makes chocolate bars\nChocolate production requires cocoa\nThe process involves tempering the chocolate",
+    "BLANK PAGE",
+    "\x012 State what is meant by a relational database model\nA relational database stores data in tables\nTables are linked by foreign keys",
+  ];
+
+  const questions = splitIntoQuestions(pageTexts);
+
+  assert.equal(questions.length, 2, `Expected 2 questions, got ${questions.length}`);
+
+  const q1 = questions.find((q) => q.number === 1);
+  const q2 = questions.find((q) => q.number === 2);
+
+  assert.ok(q1, "Q1 should be present");
+  assert.ok(q2, "Q2 should be present");
+
+  // Q1 must contain only its own content.
+  assert.ok(q1.text.toLowerCase().includes("chocolate"), "Q1 should mention chocolate");
+  assert.ok(!q1.text.toLowerCase().includes("relational database"), "Q1 should not mention relational database");
+
+  // Q2 must contain only its own content.
+  assert.ok(q2.text.toLowerCase().includes("relational database"), "Q2 should mention relational database");
+  assert.ok(!q2.text.toLowerCase().includes("chocolate"), "Q2 should not mention chocolate");
+});
+
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} test(s): ${passed} passed, ${failed} failed\n`);
