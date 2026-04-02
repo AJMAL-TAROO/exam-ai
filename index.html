@@ -594,6 +594,44 @@
     .pdf-topic-table .topic-badge {
       font-size: 0.72rem;
     }
+    .pdf-report-kw-cell { min-width: 0; }
+    .pdf-report-kw { display: flex; flex-wrap: wrap; gap: 3px; }
+    .pdf-report-kw-none { color: var(--color-muted); }
+    .pdf-report-pages { white-space: nowrap; }
+
+    /* Responsive: stacked card rows on narrow screens */
+    @media (max-width: 640px) {
+      .pdf-topic-table thead { display: none; }
+      .pdf-topic-table,
+      .pdf-topic-table tbody,
+      .pdf-topic-table tr,
+      .pdf-topic-table td { display: block; width: 100%; }
+      .pdf-topic-table tr {
+        border: 1px solid var(--color-border);
+        border-radius: 6px;
+        margin-bottom: 0.6rem;
+        padding: 0.4rem 0.5rem;
+        background: var(--color-card, #fff);
+      }
+      .pdf-topic-table td {
+        border: none;
+        padding: 0.2rem 0;
+        display: grid;
+        grid-template-columns: 6.5rem 1fr;
+        gap: 0.3rem;
+        align-items: baseline;
+      }
+      .pdf-topic-table td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        font-size: 0.72rem;
+        color: var(--color-muted);
+        white-space: nowrap;
+        padding-top: 0.1rem;
+      }
+      .pdf-topic-table td:first-child { text-align: left; }
+      .pdf-report-pages { white-space: normal; }
+    }
 
     /* ── Footer ───────────────────────────────────────────── */
     footer {

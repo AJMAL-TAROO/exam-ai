@@ -340,6 +340,7 @@ function renderPdfReport() {
             <th>#</th>
             <th>Question preview</th>
             <th>Assigned topic</th>
+            <th>Keywords</th>
             <th>Pages</th>
           </tr>
         </thead>
@@ -361,12 +362,20 @@ function renderPdfReport() {
           ? (ep && ep !== sp ? `${sp}–${ep}` : `${sp}`)
           : "—";
 
+        const topicScores = q.debugInfo?.topicScores ?? [];
+        const assignedTopicScore = topicScores.find((ts) => ts.id === assignedId);
+        const assignedKeywords = assignedTopicScore?.matchedKeywords ?? [];
+        const keywordsHtml = assignedKeywords.length > 0
+          ? `<span class="pdf-report-kw">${assignedKeywords.map(renderKeywordBadge).join(" ")}</span>`
+          : `<span class="pdf-report-kw-none">&mdash;</span>`;
+
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td>${idx + 1}</td>
-          <td>${escapeHtml(previewText)}</td>
-          <td><span class="topic-badge">${escapeHtml(assignedLabel)}</span></td>
-          <td style="white-space:nowrap">${escapeHtml(pageRange)}</td>
+          <td data-label="#">${idx + 1}</td>
+          <td data-label="Question">${escapeHtml(previewText)}</td>
+          <td data-label="Topic"><span class="topic-badge">${escapeHtml(assignedLabel)}</span></td>
+          <td data-label="Keywords" class="pdf-report-kw-cell">${keywordsHtml}</td>
+          <td data-label="Pages" class="pdf-report-pages">${escapeHtml(pageRange)}</td>
         `;
         tbody.appendChild(tr);
       });
