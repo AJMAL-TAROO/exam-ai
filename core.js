@@ -668,34 +668,41 @@ export function splitIntoQuestions(pageTexts, outMeta = null) {
     const start = questionStarts[i].index;
     const end =
       i + 1 < questionStarts.length ? questionStarts[i + 1].index : lines.length;
-    // Strip all prefix markers before joining into the final question text.
+    const startPage = linePageMap[start] ?? 1;
+    // End the question one page before the next question begins.  This ensures
+    // the last page shown for question N does not bleed into the first page of
+    // question N+1.  For the final question, use the page of its last line.
+    let endPage;
+    if (i + 1 < questionStarts.length) {
+      const nextQPage = linePageMap[questionStarts[i + 1].index] ?? startPage;
+      endPage = Math.max(startPage, nextQPage - 1);
+    } else {
+      endPage = linePageMap[end - 1] ?? startPage;
+    }
+    // Clamp endPage if a detected blank page occurs within (startPage, endPage].
+    // A blank page is a hard boundary between questions; a single question
+    // must not span across it.
+    let earliestBlank = Infinity;
+    for (const p of blankPageNums) {
+      if (p > startPage && p <= endPage && p < earliestBlank) earliestBlank = p;
+    }
+    if (earliestBlank !== Infinity) {
+      endPage = Math.max(startPage, earliestBlank - 1);
+    }
+    // Build text from only the lines whose source page falls within the final
+    // [startPage, endPage] range.  This ensures that blank-page clamping is
+    // also reflected in the question text, so AI analysis (topic scoring,
+    // keyword matching) only sees content that belongs to this question.
     const text = lines
       .slice(start, end)
+      .filter((_, idx) => {
+        const page = linePageMap[start + idx];
+        return page >= startPage && page <= endPage;
+      })
       .map(stripPrefixes)
       .join("\n")
       .trim();
     if (text.length > 10) {
-      const startPage = linePageMap[start] ?? 1;
-      // End the question one page before the next question begins.  This ensures
-      // the last page shown for question N does not bleed into the first page of
-      // question N+1.  For the final question, use the page of its last line.
-      let endPage;
-      if (i + 1 < questionStarts.length) {
-        const nextQPage = linePageMap[questionStarts[i + 1].index] ?? startPage;
-        endPage = Math.max(startPage, nextQPage - 1);
-      } else {
-        endPage = linePageMap[end - 1] ?? startPage;
-      }
-      // Clamp endPage if a detected blank page occurs within (startPage, endPage].
-      // A blank page is a hard boundary between questions; a single question
-      // must not span across it.
-      let earliestBlank = Infinity;
-      for (const p of blankPageNums) {
-        if (p > startPage && p <= endPage && p < earliestBlank) earliestBlank = p;
-      }
-      if (earliestBlank !== Infinity) {
-        endPage = Math.max(startPage, earliestBlank - 1);
-      }
       // Collect blank pages that fall within this question's FINAL page range.
       const blankPages = [...blankPageNums].filter((p) => p >= startPage && p <= endPage);
       questions.push({
