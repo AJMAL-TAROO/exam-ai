@@ -195,9 +195,12 @@ const Y_CLUSTER_TOLERANCE = 4;
  * First item x-position threshold (PDF user-space units) below which a line
  * is considered to start "at the left margin".
  * Cambridge A4 papers have a left margin of roughly 30–40 mm ≈ 85–113 pt;
- * question numbers appear right at that margin, so 90 pt is a safe threshold.
+ * question numbers appear right at that margin.  120 pt gives extra tolerance
+ * for PDFs whose coordinate origins or margin widths differ slightly from the
+ * canonical Cambridge layout, preventing question headers that are visually at
+ * the left margin from being missed due to coordinate-system variation.
  */
-const LEFT_MARGIN_MAX_X = 90;
+const LEFT_MARGIN_MAX_X = 120;
 
 /**
  * A vertical gap is considered "large" when it is this many times greater
