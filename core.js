@@ -503,6 +503,40 @@ function isInFillinSequence(lines, i, num) {
 const MIN_LINES_PER_QUESTION = 2;
 
 /**
+ * Number of lines to look ahead from a candidate header when checking for
+ * subpart labels such as (a), (b), (c) in geometric mode.
+ */
+const GEOMETRIC_SUBPART_LOOKAHEAD = 30;
+
+/**
+ * Return true when a subpart label — e.g. (a), (b), (i), (ii), (aa) — appears
+ * at the start of any line within `lookahead` lines after `startIdx`.
+ *
+ * PDF geometry markers can be missing even when the header text is present
+ * (e.g. a question number whose x-coordinate falls slightly outside
+ * LEFT_MARGIN_MAX_X).  Detecting subpart labels in the text that follows is a
+ * strong content-level signal that the candidate line really does begin a new
+ * structured main question rather than being a stray number or list item.
+ *
+ * Only used in geometric mode; bold and pattern-only modes are unaffected.
+ *
+ * @param {string[]} lines     — full flattened line array (with prefix markers)
+ * @param {number}   startIdx  — index of the candidate header line
+ * @param {number}   lookahead — how many subsequent lines to examine
+ * @returns {boolean}
+ */
+function hasSubpartSoon(lines, startIdx, lookahead = GEOMETRIC_SUBPART_LOOKAHEAD) {
+  // Matches (a), (b), (c), ... (aa), (ab), (i), (ii), (iii), etc. anchored at
+  // the start of a line (ignoring leading whitespace / prefix markers).
+  const subpartRe = /^[ \t]*\([a-zA-Z]{1,3}\)/;
+  const end = Math.min(startIdx + 1 + lookahead, lines.length);
+  for (let j = startIdx + 1; j < end; j++) {
+    if (subpartRe.test(stripPrefixes(lines[j]))) return true;
+  }
+  return false;
+}
+
+/**
  * Scan `lines` for candidate question-start positions using `candidateRE`.
  *
  * Applies the same false-positive filters and monotonic-numbering validation
@@ -666,7 +700,9 @@ export function splitIntoQuestions(pageTexts, outMeta = null) {
   //   • come after all currently-accepted starts (index and number must be
   //     strictly greater than the last accepted entry),
   //   • continue the monotonic sequence within MAX_QUESTION_NUMBER_GAP, and
-  //   • are preceded by at least MIN_LINES_PER_QUESTION non-empty body lines.
+  //   • are preceded by at least MIN_LINES_PER_QUESTION non-empty body lines,
+  //     OR are confirmed by a subpart label (a)/(b)/etc. in the next
+  //     GEOMETRIC_SUBPART_LOOKAHEAD lines (content-based confirmation).
   // Bold mode and pattern-only mode are intentionally unaffected.
   if (extractionMode === "geometric" && questionStarts.length > 0) {
     const alreadyAccepted = new Set(questionStarts.map((s) => s.index));
@@ -678,14 +714,30 @@ export function splitIntoQuestions(pageTexts, outMeta = null) {
       const num = parseInt(m[1], 10);
       if (num < 1 || num > 40) continue;
       if (isInFillinSequence(lines, i, num)) continue;
-      // Only append: the candidate must come after every already-accepted start.
+      // Monotonic next-question expectation: candidate must come after the last
+      // accepted start in both index and question number.
       const lastAccepted = questionStarts[questionStarts.length - 1];
       if (i <= lastAccepted.index) continue;
       if (num <= lastAccepted.number || num > lastAccepted.number + MAX_QUESTION_NUMBER_GAP) continue;
       const bodyLines = lines
         .slice(lastAccepted.index + 1, i)
         .filter((l) => l.trim().length > 0);
-      if (bodyLines.length < MIN_LINES_PER_QUESTION) continue;
+      // Subpart confirmation: PDF geometry markers can be missing even when the
+      // header text is present.  Detecting (a), (b), (c) etc. within the next
+      // GEOMETRIC_SUBPART_LOOKAHEAD lines confirms the candidate is a genuine
+      // main-question header rather than a stray list item or fill-in step.
+      const confirmedBySubparts = hasSubpartSoon(lines, i);
+      // Safety: reject candidates that look like list numbering (e.g. "4. text"
+      // used as a bullet point) when subpart confirmation is absent.  With
+      // subpart confirmation the candidate is accepted even when it carries
+      // period-style punctuation, because the subpart evidence outweighs the
+      // ambiguity of the punctuation.
+      if (!confirmedBySubparts && /^\d+\.\s/.test(stripPrefixes(lines[i]))) continue;
+      // Accept if sufficient preceding body lines are present (existing
+      // behaviour), OR if subpart confirmation overrides the body-length
+      // requirement (catches real-world cases where Q4 starts on the same
+      // page as Q3 with only one intervening line).
+      if (bodyLines.length < MIN_LINES_PER_QUESTION && !confirmedBySubparts) continue;
       questionStarts.push({ index: i, number: num });
       alreadyAccepted.add(i);
       // questionStarts remains sorted by index because i > lastAccepted.index.
