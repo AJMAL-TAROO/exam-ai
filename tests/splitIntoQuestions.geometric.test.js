@@ -203,6 +203,67 @@ test("geometric mode splits Q4 that lacks \\x02/\\x03 prefix when Q1–Q3 use \\
   );
 });
 
+test("geometric mode accepts Q4 without prefix when it has only 1 body line before it but subparts (a)/(b) confirm it", () => {
+  // Simulates the real-world failure scenario: Q1–Q3 are detected via \x03
+  // markers, but Q4's header has NO prefix AND there is only one body line
+  // between Q3's start and Q4's header.  The old body-length check alone would
+  // reject Q4 (1 < MIN_LINES_PER_QUESTION = 2), merging it into Q3.
+  // The subpart confirmation rule must override the body-length check and
+  // accept Q4 because (a) and (b) appear in the lines immediately after it.
+  const pageTexts = [
+    [
+      "\x031 A factory makes chocolate bars",
+      "The factory runs three production lines simultaneously",
+      "Each line produces a different variety of chocolate",
+      "\x032 State what is meant by a relational database model",
+      "A relational database organises data into tables",
+      "Tables are related using foreign-key constraints",
+      "\x033 The table shows part of the instruction set for a processor",
+      // Only ONE body line between Q3 and Q4 — old logic would reject Q4 here:
+      "Each instruction has an opcode and two operands",
+      // Q4 header: NO \x02 or \x03 prefix, plain text:
+      "4 K2 Mountain Guiding is a company that organises guided climbs",
+      // Subpart labels confirm this is a real main question:
+      "  (a) State two fields that should be included in the Climber table.",
+      "  (b) Describe a suitable database structure for storing bookings.",
+    ].join("\n"),
+  ];
+
+  const meta = {};
+  const questions = splitIntoQuestions(pageTexts, meta);
+
+  assert.equal(
+    meta.extractionMode,
+    "geometric",
+    `Expected extractionMode to be "geometric", got "${meta.extractionMode}"`
+  );
+
+  const q3 = questions.find((q) => q.number === 3);
+  const q4 = questions.find((q) => q.number === 4);
+
+  assert.ok(q3, "Question 3 should be detected");
+  assert.ok(
+    q4,
+    "Question 4 should be detected even with only 1 body line before it, because (a)/(b) subpart confirmation is present"
+  );
+
+  // Q3 must not swallow Q4's content.
+  assert.ok(
+    !q3.text.toLowerCase().includes("k2 mountain"),
+    `Q3 text must not include Q4 content ("k2 mountain"), got: ${q3.text}`
+  );
+
+  // Q4 must contain its own header and subpart content.
+  assert.ok(
+    q4.text.toLowerCase().includes("k2 mountain"),
+    `Q4 text must include "k2 mountain", got: ${q4.text}`
+  );
+  assert.ok(
+    q4.text.includes("(a)"),
+    `Q4 text must include subpart "(a)", got: ${q4.text}`
+  );
+});
+
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} test(s): ${passed} passed, ${failed} failed\n`);
