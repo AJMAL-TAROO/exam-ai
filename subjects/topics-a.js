@@ -478,7 +478,13 @@ export const TOPICS_A = {
         "logical shift left", "logical shift right", "arithmetic shift",
         "rotate left", "rotate right", "carry flag",
         "assembly code", "assembler directive", "label", "operand field",
-        "von Neumann architecture", "stored program"
+        "von Neumann architecture", "stored program",
+        // assembly-language mnemonic anchors (prevent misclassification as Ch 1)
+        "LDM", "LDD", "LDR", "LDX", "STO", "INC", "DEC",
+        "ADD", "SUB", "JMP", "JPE", "JPN", "JPZ", "OUT", "IN", "END",
+        // IX is the only register/CPU trace-table term not already listed above
+        // (ACC, PC, MAR, MDR, CIR are retained from the original keyword set)
+        "IX"
       ]
     },
     {
