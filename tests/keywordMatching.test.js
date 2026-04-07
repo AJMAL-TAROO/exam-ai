@@ -124,6 +124,41 @@ test('keyword "graph based" (multi-word) matches "graph_based" in text', () => {
   assert.equal(kwMatches("a graph_based algorithm", "graph based"), true);
 });
 
+// ─── AND/OR false-positive prevention ────────────────────────────────────────
+
+console.log("\nAND/OR false-positive prevention");
+
+test('standalone keyword "AND" matches plain English "and" (shows why it must not be used alone)', () => {
+  // kwMatches is case-insensitive whole-word: "and" in English text matches
+  // keyword "AND". This test documents the behaviour and explains why the
+  // keyword lists use "AND gate" / "OR gate" instead of bare "AND" / "OR".
+  assert.equal(kwMatches("Explain the advantages and disadvantages", "AND"), true);
+});
+
+test('multi-word keyword "AND gate" does NOT match plain English "and"', () => {
+  assert.equal(kwMatches("Explain the advantages and disadvantages", "AND gate"), false);
+});
+
+test('multi-word keyword "OR gate" does NOT match plain English "or"', () => {
+  assert.equal(kwMatches("choose one or the other option", "OR gate"), false);
+});
+
+test('multi-word keyword "NOT gate" does NOT match plain English "not"', () => {
+  assert.equal(kwMatches("this is not a logic question", "NOT gate"), false);
+});
+
+test('"AND gate" matches technical text "truth table for AND gate"', () => {
+  assert.equal(kwMatches("truth table for AND gate", "AND gate"), true);
+});
+
+test('"OR gate" matches technical text "inputs to OR gate"', () => {
+  assert.equal(kwMatches("inputs to OR gate", "OR gate"), true);
+});
+
+test('"NOT gate" matches technical text "output of NOT gate is inverted"', () => {
+  assert.equal(kwMatches("output of NOT gate is inverted", "NOT gate"), true);
+});
+
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} test(s): ${passed} passed, ${failed} failed\n`);
