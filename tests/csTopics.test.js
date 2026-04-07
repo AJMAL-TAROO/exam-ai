@@ -148,6 +148,58 @@ test("assembly-trace snippet scores higher for Chapter 4 than Chapter 1", () => 
   );
 });
 
+// ─── AND/OR false-positive regression ────────────────────────────────────────
+
+console.log("\nAND/OR false-positive regression");
+
+const ch3 = csTopics[2]; // Chapter 3 – Hardware (contains logic-gate keywords)
+
+test('Chapter 3 keywords do not include standalone "AND" or "OR" or "NOT"', () => {
+  const ambiguous = ["AND", "OR", "NOT"];
+  const found = ch3.keywords.filter((kw) => ambiguous.includes(kw.toUpperCase()));
+  assert.equal(
+    found.length,
+    0,
+    `Chapter 3 still contains ambiguous keywords: ${found.join(", ")}`
+  );
+});
+
+test('Chapter 3 keywords include unambiguous "AND gate", "OR gate", "NOT gate"', () => {
+  const required = ["AND gate", "OR gate", "NOT gate"];
+  const missing = required.filter(
+    (phrase) => !ch3.keywords.some((kw) => kw.toLowerCase() === phrase.toLowerCase())
+  );
+  assert.equal(
+    missing.length,
+    0,
+    `Chapter 3 missing unambiguous gate keywords: ${missing.join(", ")}`
+  );
+});
+
+test('"Explain the advantages and disadvantages" does not score Chapter 3 via "and"', () => {
+  // Count how many Chapter 3 keywords appear in a plain-English sentence that
+  // contains "and" but has no logic-gate content.
+  const genericSentence = "Explain the advantages and disadvantages of system software";
+  const sentenceUpper = genericSentence.toUpperCase();
+  // A hit on a multi-word phrase like "AND gate" requires the full phrase.
+  const hits = ch3.keywords.filter((kw) => sentenceUpper.includes(kw.toUpperCase()));
+  // "and" alone would score if the keyword were "AND"; with "AND gate" it must not.
+  assert.ok(
+    !hits.some((kw) => kw.toUpperCase() === "AND" || kw.toUpperCase() === "OR" || kw.toUpperCase() === "NOT"),
+    `Plain-English sentence triggered ambiguous keyword(s): ${hits.join(", ")}`
+  );
+});
+
+test('"truth table for AND gate" scores Chapter 3 via "AND gate"', () => {
+  const technicalSnippet = "truth table for AND gate";
+  const snippetUpper = technicalSnippet.toUpperCase();
+  const hits = ch3.keywords.filter((kw) => snippetUpper.includes(kw.toUpperCase()));
+  assert.ok(
+    hits.some((kw) => kw.toLowerCase() === "and gate"),
+    `Technical snippet did not match "AND gate" in Chapter 3 keywords (hits: ${hits.join(", ")})`
+  );
+});
+
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} test(s): ${passed} passed, ${failed} failed\n`);

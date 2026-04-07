@@ -455,7 +455,7 @@ export const TOPICS_A = {
         "keyboard", "mouse", "touchscreen", "microphone", "speaker",
         "printer", "monitor", "scanner", "webcam", "peripheral",
         "interrupt service routine", "ISR", "polling", "DMA",
-        "logic gates", "AND", "OR", "NOT", "NAND", "NOR", "XOR",
+        "logic gates", "AND gate", "OR gate", "NOT gate", "NAND", "NOR", "XOR",
         "truth table", "boolean"
       ]
     },

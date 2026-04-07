@@ -348,7 +348,7 @@ export const TOPICS_O = {
       id: "logic",
       label: "Logic Gates & Boolean",
       keywords: [
-        "logic gate", "AND", "OR", "NOT", "NAND", "NOR", "XOR", "XNOR",
+        "logic gate", "NAND", "NOR", "XOR", "XNOR",
         "truth table", "boolean", "logic circuit", "gate", "complement",
         "De Morgan", "half adder", "full adder", "flip-flop",
         // additional keywords / synonyms
