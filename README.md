@@ -17,6 +17,7 @@ any modern browser.
 
 - **Level selector** — O Level (IGCSE) or A Level (AS & A Level)
 - **Subject selector** — Mathematics, Physics, or Computer Science
+- **Paper selector** — for A-Level Computer Science, choose Paper 1, 2, 3, or 4
 - **PDF scanning** — reads the first page of each bundled PDF and identifies
   matching papers using keyword detection (no syllabus codes required)
 - **Question indexing** — extracts main questions (Q1 / Question 1 style) from
@@ -37,41 +38,57 @@ exam-ai/
 ├── app.js                  # UI state machine & event handlers
 ├── core.js                 # PDF processing, question splitting, topic tagging, shuffle
 ├── topicScorer.js          # Hybrid TF-IDF + keyword topic scorer
+├── pathUtils.js            # Asset path builder (buildPaperPath)
 ├── package.json            # npm test script (no runtime dependencies)
 ├── subjects/
 │   ├── subject-detect.js   # Keyword-based subject/level detection
 │   ├── topics-o.js         # O Level topic lists (Maths, Physics, CS)
 │   └── topics-a.js         # A Level topic lists (Maths, Physics, CS)
 ├── tests/
-│   └── topicScorer.test.js # Unit tests for the hybrid scorer
+│   ├── topicScorer.test.js # Unit tests for the hybrid scorer
+│   └── paperPath.test.js   # Unit tests for buildPaperPath and manifest lookup
 └── assets/
-    └── manifest.json       # Lists all bundled PDF URLs per level & subject
+    └── manifest.json       # Lists all bundled PDF URLs per level, subject & paper
 ```
 
 ---
 
 ## Adding PDFs
 
-1. **Place PDFs** in the `assets/` directory, organised by level and subject:
+1. **Place PDFs** in the `assets/` directory, organised by level, subject, and
+   (for A-Level Computer Science) paper number:
 
    ```
    assets/
    ├── o-level/
-   │   ├── maths/          ← O Level Maths papers here
+   │   ├── maths/              ← O Level Maths papers here
    │   ├── physics/
    │   └── computer-science/
    └── a-level/
-       ├── maths/          ← A Level Maths papers here
+       ├── maths/              ← A Level Maths papers here
        ├── physics/
        └── computer-science/
+           ├── question-papers/
+           │   ├── paper-1/    ← A Level CS Paper 1 question papers here
+           │   ├── paper-2/    ← A Level CS Paper 2 question papers here
+           │   ├── paper-3/    ← A Level CS Paper 3 question papers here
+           │   └── paper-4/    ← A Level CS Paper 4 question papers here
+           └── marking-scheme/ ← A Level CS mark schemes (future use)
    ```
 
    > **Note:** Only text-based (not scanned/image) PDFs are supported.
    > Cambridge past papers are typically text-based.
 
+   > **Path helper:** `pathUtils.js` exports `buildPaperPath(level, subject, resource, paperNumber)`
+   > which constructs the canonical directory path, e.g.
+   > `buildPaperPath("a-level", "computer-science", "question-papers", 1)`
+   > → `"assets/a-level/computer-science/question-papers/paper-1"`.
+
 2. **Update `assets/manifest.json`** to list every PDF URL.  
    The browser cannot enumerate directory contents, so every file must be
    listed explicitly.
+
+   For **O Level / A Level Maths / Physics** the value is a flat array:
 
    ```json
    {
@@ -81,9 +98,25 @@ exam-ai/
        "computer-science": []
      },
      "a-level": {
-       "maths":            [],
-       "physics":          [],
-       "computer-science": []
+       "maths":  [],
+       "physics": []
+     }
+   }
+   ```
+
+   For **A-Level Computer Science** the value is an object keyed by paper:
+
+   ```json
+   {
+     "a-level": {
+       "computer-science": {
+         "paper-1": [
+           "assets/a-level/computer-science/question-papers/paper-1/9618_w23_qp_11.pdf"
+         ],
+         "paper-2": [],
+         "paper-3": [],
+         "paper-4": []
+       }
      }
    }
    ```
@@ -228,17 +261,20 @@ seed always produces the same paper from the same index.
 
 ## Testing
 
-The hybrid topic scorer ships with a self-contained test suite that runs under
-Node.js (≥ 18) with no additional dependencies:
+The project ships with a self-contained test suite that runs under Node.js (≥ 18)
+with no additional dependencies:
 
 ```bash
 npm test
-# or directly:
+# or run individual suites:
 node tests/topicScorer.test.js
+node tests/paperPath.test.js
 ```
 
 The suite covers tokenisation, TF-IDF similarity, categorisation thresholds,
-hybrid scoring, paraphrase-like detection, and false-positive reduction.
+hybrid scoring, paraphrase-like detection, false-positive reduction, paper path
+generation for each paper number (1–4), invalid-input rejection, and
+manifest paper-URL lookup logic.
 
 ---
 

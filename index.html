@@ -693,9 +693,27 @@
     </div>
   </section>
 
-  <!-- ── Step 3: Scan ───────────────────────────────────────── -->
+  <!-- ── Step 3: Paper (A-Level CS only) ───────────────────── -->
+  <section class="card" id="paper-select-section" hidden>
+    <h2><span class="step-badge">3</span> Select Paper</h2>
+    <p style="margin:0 0 0.75rem; font-size:0.875rem; color:var(--color-muted);">
+      Choose which A-Level Computer Science paper to generate questions from.
+    </p>
+    <div>
+      <label>Paper number</label>
+      <div class="radio-group">
+        <label><input type="radio" name="paper-number" value="1" /> Paper 1</label>
+        <label><input type="radio" name="paper-number" value="2" /> Paper 2</label>
+        <label><input type="radio" name="paper-number" value="3" /> Paper 3</label>
+        <label><input type="radio" name="paper-number" value="4" /> Paper 4</label>
+      </div>
+    </div>
+    <div id="paper-select-status" class="status status--info" hidden></div>
+  </section>
+
+  <!-- ── Step 4: Scan ───────────────────────────────────────── -->
   <section class="card" id="scan-section" hidden>
-    <h2><span class="step-badge">3</span> Scan PDF Library</h2>
+    <h2><span class="step-badge">4</span> Scan PDF Library</h2>
     <p style="margin:0 0 0.75rem; font-size:0.875rem; color:var(--color-muted);">
       Reads the first page of each bundled PDF and filters to those matching
       your chosen subject using keyword detection.
@@ -707,9 +725,9 @@
     <div id="scan-status" class="status status--info" hidden></div>
   </section>
 
-  <!-- ── Step 4: Build Index ────────────────────────────────── -->
+  <!-- ── Step 5: Build Index ────────────────────────────────── -->
   <section class="card" id="index-section" hidden>
-    <h2><span class="step-badge">4</span> Build Question Index</h2>
+    <h2><span class="step-badge">5</span> Build Question Index</h2>
     <p style="margin:0 0 0.75rem; font-size:0.875rem; color:var(--color-muted);">
       Extracts and indexes all questions from the matched PDFs.
       This may take a moment for large papers.
@@ -737,9 +755,9 @@
     <div id="pdf-report" hidden></div>
   </section>
 
-  <!-- ── Step 5 + 6: Generate ───────────────────────────────── -->
+  <!-- ── Step 6 + 7: Generate ───────────────────────────────── -->
   <section class="card" id="generate-section" hidden>
-    <h2><span class="step-badge">5</span> Configure &amp; Generate</h2>
+    <h2><span class="step-badge">6</span> Configure &amp; Generate</h2>
 
     <div style="margin-bottom:1rem;">
       <p style="margin:0 0 0.4rem; font-weight:500; font-size:0.9rem;">Mode</p>
@@ -782,7 +800,7 @@
   <!-- ── Step 7: Paper output ───────────────────────────────── -->
   <section class="card" id="paper-section" hidden>
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem; margin-bottom:1rem;">
-      <h2 style="margin:0"><span class="step-badge">6</span> Generated Paper</h2>
+      <h2 style="margin:0"><span class="step-badge">7</span> Generated Paper</h2>
       <button class="btn btn-success" id="download-btn">
         ⬇ Download JSON
       </button>
