@@ -837,5 +837,74 @@ export const TOPICS_A = {
         "module import", "library function", "API"
       ]
     }
+  ],
+  "english": [
+    {
+      id: "reading-comprehension",
+      label: "Reading – Comprehension",
+      keywords: [
+        "comprehension", "passage", "extract", "reading", "infer", "inference",
+        "deduce", "deduction", "summary", "summarise", "summarize",
+        "main idea", "supporting detail", "tone", "mood", "atmosphere",
+        "purpose", "audience", "effect", "evidence", "quote", "reference",
+        "implicit", "explicit", "connotation", "denotation",
+        "fact", "opinion", "bias", "perspective", "viewpoint",
+        "argue", "persuade", "inform", "entertain",
+        "headline", "caption", "heading", "subheading",
+        "formal", "informal", "register", "address"
+      ]
+    },
+    {
+      id: "language-analysis",
+      label: "Language Analysis",
+      keywords: [
+        "language", "technique", "device", "metaphor", "simile", "personification",
+        "alliteration", "onomatopoeia", "imagery", "symbolism", "hyperbole",
+        "irony", "sarcasm", "oxymoron", "juxtaposition", "contrast",
+        "repetition", "rhetorical question", "emotive language", "sensory",
+        "adjective", "adverb", "verb", "noun", "tense", "active voice",
+        "passive voice", "sentence structure", "short sentence", "complex sentence",
+        "compound sentence", "paragraph", "discourse marker",
+        "descriptive", "narrative", "dialogue", "syntax", "diction",
+        "word choice", "connotation", "figurative language", "literal"
+      ]
+    },
+    {
+      id: "writing-directed",
+      label: "Writing – Directed",
+      keywords: [
+        "directed writing", "format", "layout", "letter", "report", "speech",
+        "article", "interview", "diary", "email", "review", "leaflet",
+        "newsletter", "formal letter", "informal letter", "salutation",
+        "sign off", "introduction", "conclusion", "paragraph structure",
+        "address", "subject", "greeting", "purpose", "audience", "register",
+        "persuasive", "discursive", "analytical", "advisory", "descriptive",
+        "plan", "draft", "redraft", "proofread", "edit"
+      ]
+    },
+    {
+      id: "writing-composition",
+      label: "Writing – Composition",
+      keywords: [
+        "composition", "creative writing", "narrative", "descriptive writing",
+        "story", "plot", "character", "setting", "theme", "conflict",
+        "resolution", "climax", "opening", "ending", "structure",
+        "first person", "third person", "point of view", "narration",
+        "dialogue", "show don't tell", "atmosphere", "tension",
+        "pace", "vivid", "engaging", "cohesion", "coherence",
+        "vocabulary", "sophisticated", "varied sentence", "expression",
+        "original", "creative", "imaginative"
+      ]
+    },
+    {
+      id: "summary-writing",
+      label: "Summary Writing",
+      keywords: [
+        "summary", "summarise", "summarize", "key point", "main point",
+        "select", "identify", "own words", "paraphrase", "concise",
+        "relevant", "irrelevant", "word limit", "note", "lift",
+        "directly quote", "bullet point", "condense", "précis"
+      ]
+    }
   ]
 };

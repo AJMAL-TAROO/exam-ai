@@ -133,10 +133,18 @@ function onSubjectChange(e) {
   resetPdfSelectorAndReport();
 
   if (state.subject && state.level) {
-    if (state.level === "a-level" && state.subject === "computer-science") {
-      // CS A-Level: require paper selection before scanning
+    if (state.level === "a-level") {
+      // All A-Level subjects require paper selection before scanning
       showSection("paper-select-section");
       setStatus("paper-select", "");
+      // Default to Paper 1
+      const paper1Radio = document.querySelector('input[name="paper-number"][value="1"]');
+      if (paper1Radio) {
+        paper1Radio.checked = true;
+        state.paperNumber = 1;
+        showSection("scan-section");
+        setStatus("scan", "");
+      }
     } else {
       hideSection("paper-select-section");
       showSection("scan-section");
@@ -189,8 +197,8 @@ async function onScanClick() {
 
     let urlsToScan;
 
-    if (levelKey === "a-level" && subjectKey === "computer-science" && state.paperNumber) {
-      // Paper-specific path for CS A-Level
+    if (levelKey === "a-level" && state.paperNumber) {
+      // Paper-specific path for all A-Level subjects
       const subjectData = manifest[levelKey]?.[subjectKey];
       const paperKey = `paper-${state.paperNumber}`;
       if (subjectData && typeof subjectData === "object" && !Array.isArray(subjectData)) {
@@ -210,21 +218,11 @@ async function onScanClick() {
         return;
       }
     } else {
-      // Original flow for other subjects — flatten level data (handles both
-      // flat arrays and nested paper-keyed objects gracefully)
-      const levelData = manifest[levelKey] || {};
-      urlsToScan = [];
-      for (const value of Object.values(levelData)) {
-        if (Array.isArray(value)) {
-          urlsToScan.push(...value);
-        } else if (value && typeof value === "object") {
-          for (const subValue of Object.values(value)) {
-            if (Array.isArray(subValue)) urlsToScan.push(...subValue);
-          }
-        }
-      }
+      // O-Level flow — use flat subject array from manifest
+      const subjectData = manifest[levelKey]?.[subjectKey];
+      urlsToScan = Array.isArray(subjectData) ? subjectData : [];
       if (urlsToScan.length === 0) {
-        setStatus("scan", "No PDFs found in manifest for this level. Add PDFs and update manifest.json.", "warn");
+        setStatus("scan", "No PDFs found in manifest for this subject. Add PDFs and update manifest.json.", "warn");
         setLoading("scan-btn", false);
         return;
       }

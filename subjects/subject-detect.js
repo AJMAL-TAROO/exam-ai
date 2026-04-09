@@ -2,7 +2,7 @@
  * Subject detection from first-page text of a PDF.
  * Uses rule-based keyword scoring — no syllabus codes.
  *
- * export detectSubject(pageText: string): 'maths' | 'physics' | 'computer-science' | null
+ * export detectSubject(pageText: string): 'maths' | 'physics' | 'computer-science' | 'english' | null
  * export detectLevel(pageText: string): 'o-level' | 'a-level' | null
  */
 
@@ -26,6 +26,12 @@ const SUBJECT_KEYWORDS = {
     "algorithm", "programming", "binary", "database", "networking",
     "hardware", "software", "data structure", "boolean", "logic gate",
     "pseudocode", "flowchart", "computational"
+  ],
+  "english": [
+    "english language", "english literature", "english",
+    "comprehension", "composition", "directed writing", "summary writing",
+    "reading passage", "narrative", "descriptive", "persuasive writing",
+    "prose", "poetry", "drama", "0500", "0522", "0627", "9093", "9695"
   ]
 };
 

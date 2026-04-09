@@ -16,8 +16,8 @@ any modern browser.
 ## Features
 
 - **Level selector** — O Level (IGCSE) or A Level (AS & A Level)
-- **Subject selector** — Mathematics, Physics, or Computer Science
-- **Paper selector** — for A-Level Computer Science, choose Paper 1, 2, 3, or 4
+- **Subject selector** — Mathematics, Physics, Computer Science, or English Language
+- **Paper selector** — for A-Level subjects, choose Paper 1, 2, 3, or 4 (defaults to Paper 1)
 - **PDF scanning** — reads the first page of each bundled PDF and identifies
   matching papers using keyword detection (no syllabus codes required)
 - **Question indexing** — extracts main questions (Q1 / Question 1 style) from
@@ -42,8 +42,8 @@ exam-ai/
 ├── package.json            # npm test script (no runtime dependencies)
 ├── subjects/
 │   ├── subject-detect.js   # Keyword-based subject/level detection
-│   ├── topics-o.js         # O Level topic lists (Maths, Physics, CS)
-│   └── topics-a.js         # A Level topic lists (Maths, Physics, CS)
+│   ├── topics-o.js         # O Level topic lists (Maths, Physics, CS, English)
+│   └── topics-a.js         # A Level topic lists (Maths, Physics, CS, English)
 ├── tests/
 │   ├── topicScorer.test.js # Unit tests for the hybrid scorer
 │   └── paperPath.test.js   # Unit tests for buildPaperPath and manifest lookup
@@ -56,24 +56,41 @@ exam-ai/
 ## Adding PDFs
 
 1. **Place PDFs** in the `assets/` directory, organised by level, subject, and
-   (for A-Level Computer Science) paper number:
+   paper number:
 
    ```
    assets/
    ├── o-level/
    │   ├── maths/              ← O Level Maths papers here
    │   ├── physics/
-   │   └── computer-science/
+   │   ├── computer-science/
+   │   └── english/
    └── a-level/
-       ├── maths/              ← A Level Maths papers here
+       ├── maths/
+       │   └── question-papers/
+       │       ├── paper-1/    ← A Level Maths Paper 1 question papers here
+       │       ├── paper-2/
+       │       ├── paper-3/
+       │       └── paper-4/
        ├── physics/
-       └── computer-science/
-           ├── question-papers/
-           │   ├── paper-1/    ← A Level CS Paper 1 question papers here
-           │   ├── paper-2/    ← A Level CS Paper 2 question papers here
-           │   ├── paper-3/    ← A Level CS Paper 3 question papers here
-           │   └── paper-4/    ← A Level CS Paper 4 question papers here
-           └── marking-scheme/ ← A Level CS mark schemes (future use)
+       │   └── question-papers/
+       │       ├── paper-1/
+       │       ├── paper-2/
+       │       ├── paper-3/
+       │       └── paper-4/
+       ├── computer-science/
+       │   ├── question-papers/
+       │   │   ├── paper-1/    ← A Level CS Paper 1 question papers here
+       │   │   ├── paper-2/
+       │   │   ├── paper-3/
+       │   │   └── paper-4/
+       │   └── marking-scheme/ ← A Level CS mark schemes (future use)
+       └── english/
+           └── question-papers/
+               ├── paper-1/    ← A Level English Paper 1 question papers here
+               ├── paper-2/
+               ├── paper-3/
+               └── paper-4/
    ```
 
    > **Note:** Only text-based (not scanned/image) PDFs are supported.
@@ -88,31 +105,40 @@ exam-ai/
    The browser cannot enumerate directory contents, so every file must be
    listed explicitly.
 
-   For **O Level / A Level Maths / Physics** the value is a flat array:
+   For **O Level** subjects the value is a flat array:
 
    ```json
    {
      "o-level": {
        "maths":            ["assets/o-level/maths/math_2023_p1.pdf"],
        "physics":          ["assets/o-level/physics/phys_2023_p1.pdf"],
-       "computer-science": []
-     },
-     "a-level": {
-       "maths":  [],
-       "physics": []
+       "computer-science": [],
+       "english":          []
      }
    }
    ```
 
-   For **A-Level Computer Science** the value is an object keyed by paper:
+   For **all A-Level subjects** the value is an object keyed by paper (paper-1 through paper-4):
 
    ```json
    {
      "a-level": {
+       "maths": {
+         "paper-1": ["assets/a-level/maths/question-papers/paper-1/9709_w23_qp_11.pdf"],
+         "paper-2": [],
+         "paper-3": [],
+         "paper-4": []
+       },
        "computer-science": {
          "paper-1": [
            "assets/a-level/computer-science/question-papers/paper-1/9618_w23_qp_11.pdf"
          ],
+         "paper-2": [],
+         "paper-3": [],
+         "paper-4": []
+       },
+       "english": {
+         "paper-1": [],
          "paper-2": [],
          "paper-3": [],
          "paper-4": []
