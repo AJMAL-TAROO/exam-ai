@@ -13,13 +13,15 @@ import {
 } from "./core.js";
 import { TOPICS_O } from "./subjects/topics-o.js";
 import { TOPICS_A } from "./subjects/topics-a.js";
+import { buildPaperPath } from "./pathUtils.js";
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
 const state = {
   level: null,          // 'o-level' | 'a-level'
   subject: null,        // 'maths' | 'physics' | 'computer-science'
-  allUrls: [],          // all URLs from manifest for chosen level
+  paperNumber: null,    // 1 | 2 | 3 | 4  (A-Level CS only)
+  allUrls: [],          // all URLs from manifest for chosen level/paper
   matchedUrls: [],      // filtered URLs after scanning
   selectedPdfUrls: [],  // user-selected subset of matchedUrls for indexing
   questionIndex: [],    // built index
@@ -83,6 +85,7 @@ async function loadManifest() {
 function onLevelChange(e) {
   state.level = e.target.value || null;
   state.subject = null;
+  state.paperNumber = null;
   state.matchedUrls = [];
   state.selectedPdfUrls = [];
   state.questionIndex = [];
@@ -91,7 +94,11 @@ function onLevelChange(e) {
   const subjectSelect = $("subject-select");
   subjectSelect.value = "";
 
+  // Reset paper radios
+  document.querySelectorAll('input[name="paper-number"]').forEach((r) => { r.checked = false; });
+
   // Hide downstream sections
+  hideSection("paper-select-section");
   hideSection("scan-section");
   hideSection("index-section");
   hideSection("generate-section");
@@ -109,6 +116,41 @@ function onLevelChange(e) {
 
 function onSubjectChange(e) {
   state.subject = e.target.value || null;
+  state.paperNumber = null;
+  state.matchedUrls = [];
+  state.selectedPdfUrls = [];
+  state.questionIndex = [];
+
+  // Reset paper radios
+  document.querySelectorAll('input[name="paper-number"]').forEach((r) => { r.checked = false; });
+
+  hideSection("scan-section");
+  hideSection("index-section");
+  hideSection("generate-section");
+  hideSection("paper-section");
+
+  // Clear PDF selector + report
+  resetPdfSelectorAndReport();
+
+  if (state.subject && state.level) {
+    if (state.level === "a-level" && state.subject === "computer-science") {
+      // CS A-Level: require paper selection before scanning
+      showSection("paper-select-section");
+      setStatus("paper-select", "");
+    } else {
+      hideSection("paper-select-section");
+      showSection("scan-section");
+      setStatus("scan", "");
+    }
+  } else {
+    hideSection("paper-select-section");
+  }
+}
+
+// ─── Step 3 (CS A-Level only): Paper selection ────────────────────────────────
+
+function onPaperChange(e) {
+  state.paperNumber = parseInt(e.target.value, 10) || null;
   state.matchedUrls = [];
   state.selectedPdfUrls = [];
   state.questionIndex = [];
@@ -120,7 +162,7 @@ function onSubjectChange(e) {
   // Clear PDF selector + report
   resetPdfSelectorAndReport();
 
-  if (state.subject && state.level) {
+  if (state.paperNumber) {
     showSection("scan-section");
     setStatus("scan", "");
   } else {
@@ -145,21 +187,54 @@ async function onScanClick() {
     const levelKey = state.level;    // 'o-level' or 'a-level'
     const subjectKey = state.subject; // 'maths' | 'physics' | 'computer-science'
 
-    // Get all URLs listed in manifest for this level (all subjects combined)
-    const levelData = manifest[levelKey] || {};
-    const allLevelUrls = Object.values(levelData).flat();
+    let urlsToScan;
 
-    if (allLevelUrls.length === 0) {
-      setStatus("scan", "No PDFs found in manifest for this level. Add PDFs and update manifest.json.", "warn");
-      setLoading("scan-btn", false);
-      return;
+    if (levelKey === "a-level" && subjectKey === "computer-science" && state.paperNumber) {
+      // Paper-specific path for CS A-Level
+      const subjectData = manifest[levelKey]?.[subjectKey];
+      const paperKey = `paper-${state.paperNumber}`;
+      if (subjectData && typeof subjectData === "object" && !Array.isArray(subjectData)) {
+        urlsToScan = subjectData[paperKey] || [];
+      } else {
+        urlsToScan = [];
+      }
+      if (urlsToScan.length === 0) {
+        setStatus(
+          "scan",
+          `No PDFs found in manifest for Paper ${state.paperNumber}. ` +
+          `Add PDFs to ${buildPaperPath(levelKey, subjectKey, "question-papers", state.paperNumber)} ` +
+          `and update manifest.json.`,
+          "warn"
+        );
+        setLoading("scan-btn", false);
+        return;
+      }
+    } else {
+      // Original flow for other subjects — flatten level data (handles both
+      // flat arrays and nested paper-keyed objects gracefully)
+      const levelData = manifest[levelKey] || {};
+      urlsToScan = [];
+      for (const value of Object.values(levelData)) {
+        if (Array.isArray(value)) {
+          urlsToScan.push(...value);
+        } else if (value && typeof value === "object") {
+          for (const subValue of Object.values(value)) {
+            if (Array.isArray(subValue)) urlsToScan.push(...subValue);
+          }
+        }
+      }
+      if (urlsToScan.length === 0) {
+        setStatus("scan", "No PDFs found in manifest for this level. Add PDFs and update manifest.json.", "warn");
+        setLoading("scan-btn", false);
+        return;
+      }
     }
 
-    state.allUrls = allLevelUrls;
-    setStatus("scan", `Scanning ${allLevelUrls.length} PDF(s)…`);
+    state.allUrls = urlsToScan;
+    setStatus("scan", `Scanning ${urlsToScan.length} PDF(s)…`);
 
     state.matchedUrls = await filterPdfsBySubjectLevel(
-      allLevelUrls,
+      urlsToScan,
       subjectKey,
       levelKey,
       (done, total) => {
@@ -174,9 +249,10 @@ async function onScanClick() {
         "warn"
       );
     } else {
+      const paperLabel = state.paperNumber ? ` Paper ${state.paperNumber}` : "";
       setStatus(
         "scan",
-        `✓ Matched ${state.matchedUrls.length} PDF(s) for ${subjectKey} (${levelKey}).`,
+        `✓ Matched ${state.matchedUrls.length} PDF(s) for ${subjectKey}${paperLabel} (${levelKey}).`,
         "success"
       );
       renderPdfSelector();
@@ -525,6 +601,7 @@ function onGenerateClick() {
       meta: {
         level: state.level,
         subject: state.subject,
+        ...(state.paperNumber !== null && { paper: state.paperNumber }),
         count: paper.length,
         seed: seed,
         generatedAt: new Date().toISOString(),
@@ -555,7 +632,8 @@ function renderPaper(paper, seed) {
     <h2>Generated Exam Paper</h2>
     <p class="paper-meta">
       ${state.level?.replace("-", " ").toUpperCase()} &mdash;
-      ${state.subject?.replace("-", " ").replace(/\b\w/g, (c) => c.toUpperCase())} &mdash;
+      ${state.subject?.replace("-", " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+      ${state.paperNumber !== null ? ` &mdash; Paper ${state.paperNumber}` : ""} &mdash;
       ${paper.length} Questions
       ${seed !== null ? `&mdash; Seed: <code>${seed}</code>` : ""}
     </p>
@@ -849,6 +927,11 @@ function init() {
   $("level-select").addEventListener("change", onLevelChange);
   $("subject-select").addEventListener("change", onSubjectChange);
 
+  // Paper selection (A-Level CS only)
+  document.querySelectorAll('input[name="paper-number"]').forEach((radio) => {
+    radio.addEventListener("change", onPaperChange);
+  });
+
   // Scan
   $("scan-btn").addEventListener("click", onScanClick);
 
@@ -877,6 +960,7 @@ function init() {
   // Hide all downstream sections at start
   [
     "subject-section",
+    "paper-select-section",
     "scan-section",
     "index-section",
     "generate-section",
