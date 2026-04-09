@@ -2,11 +2,22 @@
   "o-level": {
     "maths": [],
     "physics": [],
-    "computer-science": []
+    "computer-science": [],
+    "english": []
   },
   "a-level": {
-    "maths": [],
-    "physics": [],
+    "maths": {
+      "paper-1": [],
+      "paper-2": [],
+      "paper-3": [],
+      "paper-4": []
+    },
+    "physics": {
+      "paper-1": [],
+      "paper-2": [],
+      "paper-3": [],
+      "paper-4": []
+    },
     "computer-science": {
       "paper-1": [
         "assets/a-level/computer-science/question-papers/paper-1/9618_s21_qp_11.pdf",
@@ -37,6 +48,12 @@
         "assets/a-level/computer-science/question-papers/paper-1/9618_w25_qp_12.pdf",
         "assets/a-level/computer-science/question-papers/paper-1/9618_w25_qp_13.pdf"
       ],
+      "paper-2": [],
+      "paper-3": [],
+      "paper-4": []
+    },
+    "english": {
+      "paper-1": [],
       "paper-2": [],
       "paper-3": [],
       "paper-4": []
