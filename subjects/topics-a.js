@@ -1841,3 +1841,37 @@ TOPICS_A.business.paperTopics = {
     ])
   }
 };
+
+TOPICS_A["computer-science"].paperTopics = {
+  "paper-1": {
+    label: "Computer Science Theory Fundamentals",
+    topics: topicsFor("computer-science", [
+      "ch01-information-representation", "ch02-communication", "ch03-hardware",
+      "ch04-processor-fundamentals", "ch05-system-software",
+      "ch06-security-privacy-integrity", "ch07-ethics-ownership",
+      "ch08-databases"
+    ])
+  },
+  "paper-2": {
+    label: "Computer Science Fundamental Problem-Solving and Programming",
+    topics: topicsFor("computer-science", [
+      "ch09-algorithm-design", "ch10-data-types-structures",
+      "ch11-programming", "ch12-software-development"
+    ])
+  },
+  "paper-3": {
+    label: "Advanced Computer Science Theory",
+    topics: topicsFor("computer-science", [
+      "ch13-data-representation-a", "ch14-communication-internet",
+      "ch15-hardware-a", "ch16-system-software-vms", "ch17-security-a",
+      "ch18-artificial-intelligence"
+    ])
+  },
+  "paper-4": {
+    label: "Further Problem-Solving and Programming Skills",
+    topics: topicsFor("computer-science", [
+      "ch19-computational-thinking-a", "ch20-further-programming",
+      "ch10-data-types-structures", "ch11-programming"
+    ])
+  }
+};
