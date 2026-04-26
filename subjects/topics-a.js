@@ -1677,3 +1677,42 @@ TOPICS_A.maths = {
     ]
   }
 };
+
+function topicsFor(subjectKey, topicIds) {
+  const topics = TOPICS_A[subjectKey];
+  if (!Array.isArray(topics)) return [];
+  const idSet = new Set(topicIds);
+  return topics.filter((topic) => idSet.has(topic.id));
+}
+
+TOPICS_A.physics.paperTopics = {
+  "paper-1": {
+    label: "AS Physics Multiple Choice",
+    topics: topicsFor("physics", [
+      "measurements", "kinematics", "dynamics", "work-energy", "matter",
+      "waves", "electricity"
+    ])
+  },
+  "paper-2": {
+    label: "AS Physics Structured Questions",
+    topics: topicsFor("physics", [
+      "measurements", "kinematics", "dynamics", "work-energy", "matter",
+      "waves", "electricity"
+    ])
+  },
+  "paper-3": {
+    label: "Advanced Practical Skills",
+    topics: topicsFor("physics", [
+      "measurements", "kinematics", "dynamics", "work-energy", "matter",
+      "waves", "electricity"
+    ])
+  },
+  "paper-4": {
+    label: "A Level Physics Structured Questions",
+    topics: topicsFor("physics", [
+      "measurements", "kinematics", "dynamics", "work-energy", "matter",
+      "waves", "electricity", "fields", "electromagnetism", "nuclear",
+      "quantum"
+    ])
+  }
+};

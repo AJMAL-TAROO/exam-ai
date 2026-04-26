@@ -79,14 +79,15 @@ function getTopics() {
   if (!state.level || !state.subject) return [];
   const map = state.level === "o-level" ? TOPICS_O : TOPICS_A;
   const subjectTopics = map[state.subject] || [];
+  const paperKey = state.paperNumber ? `paper-${state.paperNumber}` : null;
+  const paperTopics = subjectTopics.paperTopics || subjectTopics;
+
+  if (paperKey && Array.isArray(paperTopics[paperKey]?.topics)) {
+    return paperTopics[paperKey].topics;
+  }
 
   if (Array.isArray(subjectTopics)) {
     return subjectTopics;
-  }
-
-  const paperKey = state.paperNumber ? `paper-${state.paperNumber}` : null;
-  if (paperKey && Array.isArray(subjectTopics[paperKey]?.topics)) {
-    return subjectTopics[paperKey].topics;
   }
 
   if (Array.isArray(subjectTopics.topics)) {
@@ -100,10 +101,11 @@ function getTopicGroupLabel() {
   if (!state.level || !state.subject) return "Topics";
   const map = state.level === "o-level" ? TOPICS_O : TOPICS_A;
   const subjectTopics = map[state.subject];
-  if (!subjectTopics || Array.isArray(subjectTopics)) return "Topics";
+  if (!subjectTopics) return "Topics";
 
   const paperKey = state.paperNumber ? `paper-${state.paperNumber}` : null;
-  const paperLabel = paperKey ? subjectTopics[paperKey]?.label : null;
+  const paperTopics = subjectTopics.paperTopics || subjectTopics;
+  const paperLabel = paperKey ? paperTopics[paperKey]?.label : null;
   return paperLabel ? `${paperLabel} topics` : "Topics";
 }
 
