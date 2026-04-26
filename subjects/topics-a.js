@@ -1753,3 +1753,32 @@ TOPICS_A.chemistry.paperTopics = {
     ])
   }
 };
+
+TOPICS_A.economics.paperTopics = {
+  "paper-1": {
+    label: "AS Economics Multiple Choice",
+    topics: topicsFor("economics", [
+      "microeconomics", "macroeconomics"
+    ])
+  },
+  "paper-2": {
+    label: "AS Economics Data Response and Essays",
+    topics: topicsFor("economics", [
+      "microeconomics", "macroeconomics"
+    ])
+  },
+  "paper-3": {
+    label: "A Level Economics Multiple Choice",
+    topics: topicsFor("economics", [
+      "microeconomics", "firms-and-market-structures", "macroeconomics",
+      "policy-and-international-economics"
+    ])
+  },
+  "paper-4": {
+    label: "A Level Economics Data Response and Essays",
+    topics: topicsFor("economics", [
+      "microeconomics", "firms-and-market-structures", "macroeconomics",
+      "policy-and-international-economics"
+    ])
+  }
+};
