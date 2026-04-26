@@ -1283,3 +1283,397 @@ export const TOPICS_A = {
     }
   ]
 };
+
+// Maths is paper-aware because each Cambridge 9709 component has its own
+// chapter list. Other A-Level subjects still use the legacy subject-wide array
+// format until they are migrated.
+TOPICS_A.maths = {
+  "paper-1": {
+    label: "Pure Mathematics 1",
+    topics: [
+      {
+        id: "p1-quadratics",
+        label: "Quadratics",
+        keywords: [
+          "quadratic", "quadratic equation", "quadratic function", "discriminant",
+          "roots", "factorise", "factorize", "complete the square",
+          "completing the square", "vertex", "turning point", "parabola",
+          "minimum value", "maximum value", "inequality", "quadratic inequality"
+        ]
+      },
+      {
+        id: "p1-functions",
+        label: "Functions",
+        keywords: [
+          "function", "domain", "range", "mapping", "one-to-one", "many-to-one",
+          "composite function", "inverse function", "modulus function", "f(x)",
+          "g(x)", "fg(x)", "gf(x)", "transformation", "translation", "stretch",
+          "reflection", "graph of", "sketch"
+        ]
+      },
+      {
+        id: "p1-coordinate-geometry",
+        label: "Coordinate geometry",
+        keywords: [
+          "coordinate geometry", "straight line", "gradient", "intercept",
+          "equation of a line", "parallel", "perpendicular", "midpoint",
+          "distance between", "circle", "equation of circle", "centre",
+          "center", "radius", "tangent", "normal", "intersection"
+        ]
+      },
+      {
+        id: "p1-circular-measure",
+        label: "Circular measure",
+        keywords: [
+          "radian", "radians", "arc length", "sector", "sector area",
+          "angle subtended", "circumference", "minor sector", "major sector",
+          "perimeter of sector", "circular measure"
+        ]
+      },
+      {
+        id: "p1-trigonometry",
+        label: "Trigonometry",
+        keywords: [
+          "trigonometry", "sine", "cosine", "tangent", "sin", "cos", "tan",
+          "sine rule", "cosine rule", "trig equation", "trigonometric equation",
+          "identity", "exact value", "angle", "triangle", "bearing"
+        ]
+      },
+      {
+        id: "p1-series",
+        label: "Series",
+        keywords: [
+          "series", "sequence", "arithmetic progression", "geometric progression",
+          "AP", "GP", "common difference", "common ratio", "sum to infinity",
+          "nth term", "sigma notation", "binomial expansion", "binomial theorem",
+          "Pascal", "coefficient"
+        ]
+      },
+      {
+        id: "p1-differentiation",
+        label: "Differentiation",
+        keywords: [
+          "differentiate", "differentiation", "derivative", "dy/dx",
+          "gradient function", "stationary point", "turning point", "tangent",
+          "normal", "increasing", "decreasing", "maximum", "minimum",
+          "rate of change", "second derivative"
+        ]
+      },
+      {
+        id: "p1-integration",
+        label: "Integration",
+        keywords: [
+          "integrate", "integration", "integral", "definite integral",
+          "indefinite integral", "constant of integration", "area under curve",
+          "area between curve", "reverse differentiation", "limits"
+        ]
+      }
+    ]
+  },
+
+  "paper-2": {
+    label: "Pure Mathematics 2",
+    topics: [
+      {
+        id: "p2-algebra",
+        label: "Algebra",
+        keywords: [
+          "algebra", "polynomial", "factor theorem", "remainder theorem",
+          "factorise", "factorize", "division of polynomials", "partial fractions",
+          "modulus", "inequality", "roots", "rational roots", "simultaneous"
+        ]
+      },
+      {
+        id: "p2-logarithmic-exponential",
+        label: "Logarithmic and exponential functions",
+        keywords: [
+          "logarithm", "log", "ln", "natural log", "exponential", "e^x",
+          "laws of logarithms", "change of base", "logarithmic equation",
+          "exponential equation", "growth", "decay"
+        ]
+      },
+      {
+        id: "p2-trigonometry",
+        label: "Trigonometry",
+        keywords: [
+          "trigonometry", "compound angle", "double angle", "sec", "cosec",
+          "cot", "trigonometric identity", "trigonometric equation",
+          "general solution", "radian", "sin", "cos", "tan", "exact value"
+        ]
+      },
+      {
+        id: "p2-differentiation",
+        label: "Differentiation",
+        keywords: [
+          "differentiate", "differentiation", "derivative", "chain rule",
+          "product rule", "quotient rule", "implicit differentiation",
+          "parametric differentiation", "stationary point", "second derivative"
+        ]
+      },
+      {
+        id: "p2-integration",
+        label: "Integration",
+        keywords: [
+          "integrate", "integration", "integral", "substitution", "by parts",
+          "partial fractions", "trapezium rule", "area under curve",
+          "volume of revolution", "definite integral"
+        ]
+      },
+      {
+        id: "p2-numerical-solution",
+        label: "Numerical solution of equations",
+        keywords: [
+          "numerical solution", "iteration", "iterative formula", "Newton-Raphson",
+          "Newton Raphson", "root", "approximate root", "change of sign",
+          "convergence", "divergence", "staircase diagram", "cobweb diagram"
+        ]
+      }
+    ]
+  },
+
+  "paper-3": {
+    label: "Pure Mathematics 3",
+    topics: [
+      {
+        id: "p3-algebra",
+        label: "Algebra",
+        keywords: [
+          "algebra", "polynomial", "factor theorem", "remainder theorem",
+          "partial fractions", "modulus", "inequality", "roots",
+          "rational roots", "binomial expansion", "series"
+        ]
+      },
+      {
+        id: "p3-logarithmic-exponential",
+        label: "Logarithmic and exponential functions",
+        keywords: [
+          "logarithm", "log", "ln", "natural log", "exponential", "e^x",
+          "laws of logarithms", "exponential equation", "logarithmic equation",
+          "growth", "decay"
+        ]
+      },
+      {
+        id: "p3-trigonometry",
+        label: "Trigonometry",
+        keywords: [
+          "trigonometry", "compound angle", "double angle", "sec", "cosec",
+          "cot", "inverse trig", "arcsin", "arccos", "arctan",
+          "trigonometric identity", "trigonometric equation", "general solution"
+        ]
+      },
+      {
+        id: "p3-differentiation",
+        label: "Differentiation",
+        keywords: [
+          "differentiate", "differentiation", "derivative", "chain rule",
+          "product rule", "quotient rule", "implicit differentiation",
+          "parametric differentiation", "rate of change", "second derivative"
+        ]
+      },
+      {
+        id: "p3-integration",
+        label: "Integration",
+        keywords: [
+          "integrate", "integration", "integral", "substitution", "by parts",
+          "partial fractions", "differential equation", "separable",
+          "area under curve", "volume of revolution"
+        ]
+      },
+      {
+        id: "p3-numerical-solution",
+        label: "Numerical solution of equations",
+        keywords: [
+          "numerical solution", "iteration", "iterative formula", "Newton-Raphson",
+          "root", "approximate root", "change of sign", "convergence",
+          "staircase diagram", "cobweb diagram"
+        ]
+      },
+      {
+        id: "p3-vectors",
+        label: "Vectors",
+        keywords: [
+          "vector", "position vector", "unit vector", "scalar product",
+          "dot product", "magnitude", "direction", "parallel", "perpendicular",
+          "collinear", "angle between vectors", "3D", "i j k", "line"
+        ]
+      },
+      {
+        id: "p3-differential-equations",
+        label: "Differential equations",
+        keywords: [
+          "differential equation", "separable", "general solution",
+          "particular solution", "initial condition", "dy/dx", "rate of change",
+          "modelling", "modeling", "constant of proportionality"
+        ]
+      },
+      {
+        id: "p3-complex-numbers",
+        label: "Complex numbers",
+        keywords: [
+          "complex number", "real part", "imaginary part", "argument",
+          "modulus", "Argand diagram", "conjugate", "locus", "polar form",
+          "cartesian form", "roots", "i"
+        ]
+      }
+    ]
+  },
+
+  "paper-4": {
+    label: "Mechanics",
+    topics: [
+      {
+        id: "p4-forces-equilibrium",
+        label: "Forces and equilibrium",
+        keywords: [
+          "force", "equilibrium", "resultant force", "resolve", "resolving",
+          "component", "friction", "coefficient of friction", "limiting friction",
+          "normal reaction", "tension", "thrust", "smooth", "rough",
+          "inclined plane", "lamina", "centre of gravity", "center of gravity"
+        ]
+      },
+      {
+        id: "p4-kinematics",
+        label: "Kinematics of motion in a straight line",
+        keywords: [
+          "kinematics", "motion in a straight line", "displacement", "velocity",
+          "acceleration", "speed", "SUVAT", "constant acceleration",
+          "v = u + at", "s = ut", "v^2", "distance-time", "velocity-time",
+          "area under graph", "gradient"
+        ]
+      },
+      {
+        id: "p4-momentum",
+        label: "Momentum",
+        keywords: [
+          "momentum", "impulse", "conservation of momentum", "collision",
+          "coalescence", "separation", "elastic", "inelastic", "linear momentum",
+          "change in momentum", "rebound"
+        ]
+      },
+      {
+        id: "p4-newtons-laws",
+        label: "Newton's laws of motion",
+        keywords: [
+          "Newton", "Newton's law", "F = ma", "mass", "weight",
+          "acceleration", "resultant force", "connected particles", "pulley",
+          "light string", "inextensible string", "tension", "driving force"
+        ]
+      },
+      {
+        id: "p4-energy-work-power",
+        label: "Energy, work and power",
+        keywords: [
+          "energy", "work", "work done", "power", "kinetic energy",
+          "potential energy", "gravitational potential energy",
+          "conservation of energy", "work-energy", "efficiency", "rate of working"
+        ]
+      }
+    ]
+  },
+
+  "paper-5": {
+    label: "Probability & Statistics 1",
+    topics: [
+      {
+        id: "p5-representation-of-data",
+        label: "Representation of data",
+        keywords: [
+          "data", "histogram", "frequency", "cumulative frequency",
+          "box plot", "stem and leaf", "mean", "median", "mode",
+          "quartile", "interquartile range", "standard deviation", "variance",
+          "coding", "outlier"
+        ]
+      },
+      {
+        id: "p5-permutations-combinations",
+        label: "Permutations and combinations",
+        keywords: [
+          "permutation", "combination", "arrangement", "selection", "factorial",
+          "nPr", "nCr", "ways", "choose", "order matters", "without repetition",
+          "with repetition"
+        ]
+      },
+      {
+        id: "p5-probability",
+        label: "Probability",
+        keywords: [
+          "probability", "event", "sample space", "mutually exclusive",
+          "independent", "conditional probability", "tree diagram", "Venn diagram",
+          "addition rule", "multiplication rule", "P(A)", "P(B)", "given"
+        ]
+      },
+      {
+        id: "p5-discrete-random-variables",
+        label: "Discrete random variables",
+        keywords: [
+          "discrete random variable", "random variable", "probability distribution",
+          "expected value", "expectation", "E(X)", "Var(X)", "variance",
+          "binomial distribution", "B(n, p)", "binomial", "probability mass"
+        ]
+      },
+      {
+        id: "p5-normal-distribution",
+        label: "The normal distribution",
+        keywords: [
+          "normal distribution", "standard normal", "z-score", "standardise",
+          "standardize", "mean", "variance", "standard deviation", "N(",
+          "Phi", "normal approximation", "continuity correction", "probability"
+        ]
+      }
+    ]
+  },
+
+  "paper-6": {
+    label: "Probability & Statistics 2",
+    topics: [
+      {
+        id: "p6-poisson-distribution",
+        label: "The Poisson distribution",
+        keywords: [
+          "Poisson", "Poisson distribution", "Po(", "lambda", "mean rate",
+          "events per", "independent events", "Poisson approximation",
+          "probability"
+        ]
+      },
+      {
+        id: "p6-linear-combinations",
+        label: "Linear combinations of random variables",
+        keywords: [
+          "linear combination", "random variables", "aX + bY",
+          "sum of random variables", "difference of random variables", "E(aX",
+          "Var(aX", "independent", "mean of", "variance of"
+        ]
+      },
+      {
+        id: "p6-continuous-random-variables",
+        label: "Continuous random variables",
+        keywords: [
+          "continuous random variable", "probability density function", "pdf",
+          "cumulative distribution function", "cdf", "density function",
+          "f(x)", "F(x)", "median", "quartile", "expected value",
+          "variance", "integration"
+        ]
+      },
+      {
+        id: "p6-sampling-estimation",
+        label: "Sampling and estimation",
+        keywords: [
+          "sample", "population", "sampling", "estimation", "estimate",
+          "confidence interval", "unbiased estimate", "sample mean",
+          "sample variance", "central limit theorem", "standard error",
+          "random sample", "sampling distribution"
+        ]
+      },
+      {
+        id: "p6-hypothesis-tests",
+        label: "Hypothesis tests",
+        keywords: [
+          "hypothesis test", "null hypothesis", "alternative hypothesis",
+          "significance level", "critical region", "test statistic", "p-value",
+          "one-tailed", "two-tailed", "reject", "do not reject",
+          "Type I error", "Type II error"
+        ]
+      }
+    ]
+  }
+};

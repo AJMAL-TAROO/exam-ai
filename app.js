@@ -78,7 +78,33 @@ function setLoading(buttonId, loading) {
 function getTopics() {
   if (!state.level || !state.subject) return [];
   const map = state.level === "o-level" ? TOPICS_O : TOPICS_A;
-  return map[state.subject] || [];
+  const subjectTopics = map[state.subject] || [];
+
+  if (Array.isArray(subjectTopics)) {
+    return subjectTopics;
+  }
+
+  const paperKey = state.paperNumber ? `paper-${state.paperNumber}` : null;
+  if (paperKey && Array.isArray(subjectTopics[paperKey]?.topics)) {
+    return subjectTopics[paperKey].topics;
+  }
+
+  if (Array.isArray(subjectTopics.topics)) {
+    return subjectTopics.topics;
+  }
+
+  return [];
+}
+
+function getTopicGroupLabel() {
+  if (!state.level || !state.subject) return "Topics";
+  const map = state.level === "o-level" ? TOPICS_O : TOPICS_A;
+  const subjectTopics = map[state.subject];
+  if (!subjectTopics || Array.isArray(subjectTopics)) return "Topics";
+
+  const paperKey = state.paperNumber ? `paper-${state.paperNumber}` : null;
+  const paperLabel = paperKey ? subjectTopics[paperKey]?.label : null;
+  return paperLabel ? `${paperLabel} topics` : "Topics";
 }
 
 function formatSubjectLabel(subjectKey) {
@@ -584,6 +610,11 @@ function renderPdfReport() {
 function buildTopicCheckboxes() {
   const container = $("topic-checkboxes");
   container.innerHTML = "";
+
+  const title = $("topic-selection")?.querySelector("p");
+  if (title) {
+    title.textContent = getTopicGroupLabel();
+  }
 
   // Select All / Deselect All controls
   const controls = document.createElement("div");
