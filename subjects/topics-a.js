@@ -1,7 +1,7 @@
 /**
  * A Level topic lists per subject.
  * Each entry: { id, label, keywords[] }
- * keywords are used for scoring questions into topics.
+ * keywords are used for scoring questions into topic.
  */
 
 export const TOPICS_A = {
