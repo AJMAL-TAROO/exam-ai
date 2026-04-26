@@ -19,8 +19,8 @@ import { buildPaperPath } from "./pathUtils.js";
 
 const state = {
   level: null,          // 'o-level' | 'a-level'
-  subject: null,        // 'maths' | 'physics' | 'computer-science'
-  paperNumber: null,    // 1 | 2 | 3 | 4  (A-Level CS only)
+  subject: null,        // subject key from manifest / topics map
+  paperNumber: null,    // numeric paper number for A-Level subjects
   allUrls: [],          // all URLs from manifest for chosen level/paper
   matchedUrls: [],      // filtered URLs after scanning
   selectedPdfUrls: [],  // user-selected subset of matchedUrls for indexing
@@ -33,6 +33,17 @@ const state = {
 
 /** Maximum characters shown in the question preview inside the index report. */
 const MAX_PREVIEW_LENGTH = 120;
+
+const SUBJECT_LABELS = {
+  maths: "Mathematics",
+  physics: "Physics",
+  chemistry: "Chemistry",
+  economics: "Economics",
+  accounts: "Accounts",
+  business: "Business",
+  "computer-science": "Computer Science",
+  english: "English Language",
+};
 
 // ─── DOM refs ─────────────────────────────────────────────────────────────────
 
@@ -70,6 +81,58 @@ function getTopics() {
   return map[state.subject] || [];
 }
 
+function formatSubjectLabel(subjectKey) {
+  return SUBJECT_LABELS[subjectKey] ||
+    subjectKey.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function getSortedPaperNumbers(subjectData) {
+  if (!subjectData || typeof subjectData !== "object" || Array.isArray(subjectData)) {
+    return [];
+  }
+  return Object.keys(subjectData)
+    .map((key) => {
+      const match = key.match(/^paper-(\d+)$/);
+      return match ? parseInt(match[1], 10) : null;
+    })
+    .filter((num) => Number.isInteger(num))
+    .sort((a, b) => a - b);
+}
+
+function populateSubjectOptions(levelKey, manifest) {
+  const subjectSelect = $("subject-select");
+  subjectSelect.innerHTML = '<option value="">— choose subject —</option>';
+
+  const subjects = Object.keys(manifest?.[levelKey] || {}).sort((a, b) =>
+    formatSubjectLabel(a).localeCompare(formatSubjectLabel(b))
+  );
+
+  subjects.forEach((subjectKey) => {
+    const option = document.createElement("option");
+    option.value = subjectKey;
+    option.textContent = formatSubjectLabel(subjectKey);
+    subjectSelect.appendChild(option);
+  });
+}
+
+function renderPaperOptions(paperNumbers) {
+  const container = $("paper-number-options");
+  container.innerHTML = "";
+
+  paperNumbers.forEach((paper) => {
+    const label = document.createElement("label");
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "paper-number";
+    radio.value = String(paper);
+    radio.addEventListener("change", onPaperChange);
+
+    label.appendChild(radio);
+    label.appendChild(document.createTextNode(` Paper ${paper}`));
+    container.appendChild(label);
+  });
+}
+
 // ─── Manifest loading ─────────────────────────────────────────────────────────
 
 async function loadManifest() {
@@ -82,7 +145,7 @@ async function loadManifest() {
 
 // ─── Step 1 + 2: Level & Subject selection ────────────────────────────────────
 
-function onLevelChange(e) {
+async function onLevelChange(e) {
   state.level = e.target.value || null;
   state.subject = null;
   state.paperNumber = null;
@@ -92,10 +155,9 @@ function onLevelChange(e) {
 
   // Reset subject selector
   const subjectSelect = $("subject-select");
-  subjectSelect.value = "";
+  subjectSelect.innerHTML = '<option value="">— choose subject —</option>';
 
-  // Reset paper radios
-  document.querySelectorAll('input[name="paper-number"]').forEach((r) => { r.checked = false; });
+  $("paper-number-options").innerHTML = "";
 
   // Hide downstream sections
   hideSection("paper-select-section");
@@ -108,21 +170,22 @@ function onLevelChange(e) {
   resetPdfSelectorAndReport();
 
   if (state.level) {
+    const manifest = await loadManifest();
+    populateSubjectOptions(state.level, manifest);
     showSection("subject-section");
   } else {
     hideSection("subject-section");
   }
 }
 
-function onSubjectChange(e) {
+async function onSubjectChange(e) {
   state.subject = e.target.value || null;
   state.paperNumber = null;
   state.matchedUrls = [];
   state.selectedPdfUrls = [];
   state.questionIndex = [];
 
-  // Reset paper radios
-  document.querySelectorAll('input[name="paper-number"]').forEach((r) => { r.checked = false; });
+  $("paper-number-options").innerHTML = "";
 
   hideSection("scan-section");
   hideSection("index-section");
@@ -134,16 +197,25 @@ function onSubjectChange(e) {
 
   if (state.subject && state.level) {
     if (state.level === "a-level") {
-      // All A-Level subjects require paper selection before scanning
+      const manifest = await loadManifest();
+      const paperNumbers = getSortedPaperNumbers(manifest?.[state.level]?.[state.subject]);
+
+      renderPaperOptions(paperNumbers);
       showSection("paper-select-section");
-      setStatus("paper-select", "");
-      // Default to Paper 1
-      const paper1Radio = document.querySelector('input[name="paper-number"][value="1"]');
-      if (paper1Radio) {
-        paper1Radio.checked = true;
-        state.paperNumber = 1;
+      if (paperNumbers.length > 0) {
+        setStatus("paper-select", "");
+        const firstPaper = paperNumbers[0];
+        const firstRadio = document.querySelector(`input[name="paper-number"][value="${firstPaper}"]`);
+        if (firstRadio) {
+          firstRadio.checked = true;
+        }
+        state.paperNumber = firstPaper;
         showSection("scan-section");
         setStatus("scan", "");
+      } else {
+        state.paperNumber = null;
+        hideSection("scan-section");
+        setStatus("paper-select", "No paper folders found in the manifest for this subject.", "warn");
       }
     } else {
       hideSection("paper-select-section");
@@ -192,8 +264,8 @@ async function onScanClick() {
 
   try {
     const manifest = await loadManifest();
-    const levelKey = state.level;    // 'o-level' or 'a-level'
-    const subjectKey = state.subject; // 'maths' | 'physics' | 'computer-science'
+    const levelKey = state.level;
+    const subjectKey = state.subject;
 
     let urlsToScan;
 
@@ -630,7 +702,7 @@ function renderPaper(paper, seed) {
     <h2>Generated Exam Paper</h2>
     <p class="paper-meta">
       ${state.level?.replace("-", " ").toUpperCase()} &mdash;
-      ${state.subject?.replace("-", " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+      ${formatSubjectLabel(state.subject)}
       ${state.paperNumber !== null ? ` &mdash; Paper ${state.paperNumber}` : ""} &mdash;
       ${paper.length} Questions
       ${seed !== null ? `&mdash; Seed: <code>${seed}</code>` : ""}
@@ -924,11 +996,6 @@ function init() {
   // Wire up level + subject
   $("level-select").addEventListener("change", onLevelChange);
   $("subject-select").addEventListener("change", onSubjectChange);
-
-  // Paper selection (A-Level CS only)
-  document.querySelectorAll('input[name="paper-number"]').forEach((radio) => {
-    radio.addEventListener("change", onPaperChange);
-  });
 
   // Scan
   $("scan-btn").addEventListener("click", onScanClick);

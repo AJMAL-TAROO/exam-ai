@@ -686,10 +686,6 @@
       <label for="subject-select">Subject</label>
       <select id="subject-select">
         <option value="">— choose subject —</option>
-        <option value="maths">Mathematics</option>
-        <option value="physics">Physics</option>
-        <option value="computer-science">Computer Science</option>
-        <option value="english">English Language</option>
       </select>
     </div>
   </section>
@@ -702,12 +698,7 @@
     </p>
     <div>
       <label>Paper number</label>
-      <div class="radio-group">
-        <label><input type="radio" name="paper-number" value="1" checked /> Paper 1</label>
-        <label><input type="radio" name="paper-number" value="2" /> Paper 2</label>
-        <label><input type="radio" name="paper-number" value="3" /> Paper 3</label>
-        <label><input type="radio" name="paper-number" value="4" /> Paper 4</label>
-      </div>
+      <div class="radio-group" id="paper-number-options"></div>
     </div>
     <div id="paper-select-status" class="status status--info" hidden></div>
   </section>

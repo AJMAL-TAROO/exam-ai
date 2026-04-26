@@ -2,7 +2,7 @@
  * Subject detection from first-page text of a PDF.
  * Uses rule-based keyword scoring — no syllabus codes.
  *
- * export detectSubject(pageText: string): 'maths' | 'physics' | 'computer-science' | 'english' | null
+ * export detectSubject(pageText: string): 'maths' | 'physics' | 'chemistry' | 'economics' | 'accounts' | 'business' | 'computer-science' | 'english' | null
  * export detectLevel(pageText: string): 'o-level' | 'a-level' | null
  */
 
@@ -20,6 +20,31 @@ const SUBJECT_KEYWORDS = {
     "mechanics", "thermodynamics", "electromagnetism", "optics", "quantum",
     "kinematics", "dynamics", "forces", "waves", "electricity", "magnetism",
     "radioactivity", "nuclear", "astrophysics"
+  ],
+  chemistry: [
+    "chemistry",
+    "organic chemistry", "inorganic chemistry", "physical chemistry",
+    "mole", "stoichiometry", "equilibrium", "enthalpy", "rate equation",
+    "acid", "base", "redox", "electrolysis", "alkane", "alkene",
+    "halogenoalkane", "polymer", "titration", "spectroscopy"
+  ],
+  economics: [
+    "economics",
+    "microeconomics", "macroeconomics", "demand", "supply", "elasticity",
+    "market failure", "externality", "inflation", "unemployment", "gdp",
+    "aggregate demand", "aggregate supply", "fiscal policy", "monetary policy"
+  ],
+  accounts: [
+    "accounting", "accounts",
+    "ledger", "journal", "trial balance", "income statement",
+    "statement of financial position", "balance sheet", "depreciation",
+    "cash flow", "ratio analysis", "marginal costing", "budgeting", "variance"
+  ],
+  business: [
+    "business", "business studies",
+    "marketing", "market research", "operations management", "human resource management",
+    "motivation", "leadership", "stakeholder", "sources of finance",
+    "cash flow forecast", "break-even", "strategy", "swot", "pest"
   ],
   "computer-science": [
     "computer science", "computing", "computer studies",
@@ -44,7 +69,7 @@ const LEVEL_KEYWORDS = {
   ],
   "a-level": [
     "advanced level", "a level", "a-level", "a2", "as level", "as-level",
-    "9709", "9702", "9608", "9618",
+    "9709", "9702", "9701", "9708", "9706", "9609", "9608", "9618",
     "higher", "advanced subsidiary"
   ]
 };
@@ -66,7 +91,7 @@ function scoreKeywords(text, keywords) {
 /**
  * Detect subject from first-page text.
  * @param {string} pageText
- * @returns {'maths'|'physics'|'computer-science'|null}
+ * @returns {'maths'|'physics'|'chemistry'|'economics'|'accounts'|'business'|'computer-science'|'english'|null}
  */
 export function detectSubject(pageText) {
   const scores = Object.fromEntries(

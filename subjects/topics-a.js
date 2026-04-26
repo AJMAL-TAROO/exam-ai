@@ -400,6 +400,381 @@ export const TOPICS_A = {
     }
   ],
 
+  chemistry: [
+    {
+      id: "physical-chemistry",
+      label: "Physical Chemistry",
+      keywords: [
+        "amount of substance", "mole", "avogadro", "empirical formula",
+        "molecular formula", "ideal gas", "gas equation", "enthalpy",
+        "born-haber", "hess law", "entropy", "gibbs free energy",
+        "equilibrium", "le chatelier", "kc", "kp", "acid", "base",
+        "ph", "buffer", "ka", "kb", "salt hydrolysis", "redox",
+        "electrode potential", "electrolysis", "faraday", "rate equation",
+        "reaction kinetics", "activation energy", "arrhenius", "catalyst",
+        // additional keywords / synonyms
+        "stoichiometry", "limiting reagent", "percentage yield", "atom economy",
+        "ideal gas equation", "pv = nrt", "molar volume", "standard conditions",
+        "enthalpy change", "standard enthalpy change", "enthalpy cycle",
+        "bond energy", "lattice energy", "hydration enthalpy",
+        "entropy change", "feasibility", "spontaneous", "delta g",
+        "dynamic equilibrium", "position of equilibrium", "equilibrium constant",
+        "weak acid", "weak base", "strong acid", "strong base",
+        "ph curve", "acid-base titration", "indicator", "half-neutralisation",
+        "buffer solution", "common ion effect", "partition coefficient",
+        "oxidation number", "disproportionation", "comproportionation",
+        "cell potential", "e cell", "electrochemical cell", "fuel cell",
+        "electrode", "cathode", "anode", "standard hydrogen electrode",
+        "collision theory", "maxwell-boltzmann", "boltzmann distribution",
+        "order of reaction", "rate-determining step", "initial rates",
+        "heterogeneous catalyst", "homogeneous catalyst"
+      ]
+    },
+    {
+      id: "inorganic-chemistry",
+      label: "Inorganic Chemistry",
+      keywords: [
+        "periodicity", "group 2", "group 17", "halogen", "transition element",
+        "transition metal", "coordination", "ligand", "complex ion",
+        "oxidation state", "redox titration", "chromate", "manganate",
+        "nitrogen", "sulfur", "ammonia", "contact process", "haber process",
+        "thermal stability", "solubility", "nitrate", "carbonate",
+        "transition metal chemistry", "catalytic converter",
+        // additional keywords / synonyms
+        "period 3", "period 2", "atomic radius", "ionic radius",
+        "first ionisation energy", "successive ionisation energy",
+        "electronegativity", "electron affinity", "melting point trend",
+        "group 2 hydroxide", "group 2 sulfate", "decomposition of nitrates",
+        "chlorine", "bromine", "iodine", "halide", "halide ion",
+        "displacement reaction", "reducing ability", "oxidising ability",
+        "aqueous chlorine", "chlorate", "chloride", "silver halide",
+        "transition series", "d-block", "variable oxidation states",
+        "colour of complex", "substitution reaction", "ligand exchange",
+        "coordination number", "shape of complex ion", "bidentate ligand",
+        "ammonia ligand", "aqua ligand", "chloride ligand", "cn ligand",
+        "nitrogen chemistry", "oxides of nitrogen", "nitric acid",
+        "sulfur dioxide", "sulfur trioxide", "sulfuric acid",
+        "acid rain", "nitrogen fertiliser", "environmental chemistry"
+      ]
+    },
+    {
+      id: "organic-chemistry",
+      label: "Organic Chemistry",
+      keywords: [
+        "organic", "hydrocarbon", "alkane", "alkene", "arene", "benzene",
+        "halogenoalkane", "alcohol", "aldehyde", "ketone", "carboxylic acid",
+        "acyl chloride", "ester", "amine", "amide", "polymer", "addition polymer",
+        "condensation polymer", "electrophilic addition", "nucleophilic substitution",
+        "elimination", "oxidation of alcohol", "reduction", "reflux",
+        "fractional distillation", "structural isomerism", "stereoisomerism",
+        "cis-trans", "e-z isomerism", "optical isomerism", "chirality",
+        // additional keywords / synonyms
+        "homologous series", "general formula", "displayed formula",
+        "skeletal formula", "functional group", "homolytic fission",
+        "heterolytic fission", "free radical substitution", "cracking",
+        "combustion", "hydration", "hydrogenation", "polymerisation",
+        "electrophilic substitution", "friedel-crafts", "nitration",
+        "halogenation", "phenol", "phenylamine", "diazonium salt",
+        "carbonyl compound", "cyanohydrin", "2,4-dnph", "tollens reagent",
+        "fehlings solution", "iodoform", "acidified dichromate",
+        "nucleophilic addition", "hydrolysis", "esterification",
+        "acylation", "condensation reaction", "peptide bond",
+        "polyamide", "polyester", "amino acid", "protein hydrolysis",
+        "chiral centre", "enantiomer", "racemic mixture",
+        "structural formula", "chain isomerism", "position isomerism",
+        "functional group isomerism", "geometric isomerism"
+      ]
+    },
+    {
+      id: "analysis-and-techniques",
+      label: "Analysis and Techniques",
+      keywords: [
+        "mass spectrometry", "infrared spectroscopy", "nmr", "chromatography",
+        "titration", "qualitative analysis", "test for ion", "test for gas",
+        "flame test", "precipitate", "aqueous ion", "deduce structure",
+        "fragment ion", "molecular ion", "chemical shift", "splitting pattern",
+        "retention factor", "rf value",
+        // additional keywords / synonyms
+        "mass spectrum", "peak abundance", "m/z", "relative atomic mass",
+        "base peak", "parent peak", "molecular formula from mass spectrum",
+        "infrared spectrum", "absorption band", "wavenumber", "fingerprint region",
+        "oh stretch", "c=o stretch", "n-h stretch", "c-h stretch",
+        "proton nmr", "carbon-13 nmr", "13c nmr", "integration",
+        "number of proton environments", "coupling", "spin-spin splitting",
+        "singlet", "doublet", "triplet", "quartet", "multiplet",
+        "paper chromatography", "thin layer chromatography", "column chromatography",
+        "mobile phase", "stationary phase", "solvent front",
+        "test for ammonium", "test for sulfate", "test for nitrate",
+        "test for carbonate", "test for chloride", "test for bromide",
+        "test for iodide", "test for cation", "test for anion",
+        "ammonia gas", "carbon dioxide test", "hydrogen test", "oxygen test"
+      ]
+    }
+  ],
+
+  economics: [
+    {
+      id: "microeconomics",
+      label: "Microeconomics",
+      keywords: [
+        "demand", "supply", "price mechanism", "equilibrium price",
+        "elasticity", "ped", "yed", "xed", "consumer surplus",
+        "producer surplus", "market failure", "externality", "public good",
+        "merit good", "demerit good", "asymmetric information",
+        "tax", "subsidy", "minimum price", "maximum price", "resource allocation",
+        // additional keywords / synonyms
+        "individual demand", "market demand", "individual supply", "market supply",
+        "change in demand", "change in quantity demanded", "extension of demand",
+        "contraction of demand", "shift in demand", "shift in supply",
+        "joint demand", "composite demand", "derived demand", "competitive supply",
+        "price elasticity of demand", "income elasticity of demand",
+        "cross elasticity of demand", "price elasticity of supply",
+        "complement", "substitute", "normal good", "inferior good",
+        "necessity", "luxury good", "incidence of tax", "specific tax",
+        "ad valorem tax", "price ceiling", "price floor", "buffer stock",
+        "social cost", "social benefit", "private cost", "private benefit",
+        "deadweight loss", "allocative efficiency", "productive efficiency"
+      ]
+    },
+    {
+      id: "firms-and-market-structures",
+      label: "Firms and Market Structures",
+      keywords: [
+        "cost", "revenue", "profit", "marginal cost", "average cost",
+        "economies of scale", "diseconomies of scale", "perfect competition",
+        "monopoly", "monopolistic competition", "oligopoly", "contestable market",
+        "price discrimination", "barriers to entry", "profit maximisation",
+        "efficiency", "productivity", "market structure",
+        // additional keywords / synonyms
+        "fixed cost", "variable cost", "total cost", "average variable cost",
+        "average fixed cost", "marginal revenue", "average revenue",
+        "normal profit", "supernormal profit", "abnormal profit",
+        "shutdown point", "break-even", "short run", "long run",
+        "minimum efficient scale", "internal economies", "external economies",
+        "managerial economies", "technical economies", "purchasing economies",
+        "risk-bearing economies", "x-inefficiency", "satisficing",
+        "revenue maximisation", "sales maximisation", "principal-agent problem",
+        "kinked demand curve", "cartel", "collusion", "non-price competition",
+        "contestability", "natural monopoly", "monopsony", "duopoly"
+      ]
+    },
+    {
+      id: "macroeconomics",
+      label: "Macroeconomics",
+      keywords: [
+        "gdp", "gnp", "economic growth", "inflation", "deflation",
+        "unemployment", "balance of payments", "current account",
+        "exchange rate", "aggregate demand", "aggregate supply",
+        "circular flow", "multiplier", "money supply", "banking system",
+        "living standards", "development", "poverty", "inequality",
+        // additional keywords / synonyms
+        "real gdp", "nominal gdp", "national income", "national output",
+        "real income", "output gap", "business cycle", "trade cycle",
+        "demand-pull inflation", "cost-push inflation", "hyperinflation",
+        "disinflation", "consumer price index", "cpi",
+        "cyclical unemployment", "structural unemployment",
+        "frictional unemployment", "seasonal unemployment",
+        "full employment", "labour force", "participation rate",
+        "aggregate demand curve", "aggregate supply curve", "sr as", "lr as",
+        "consumption", "investment", "government spending", "net exports",
+        "credit creation", "commercial bank", "central bank",
+        "liquidity preference", "quantity theory of money",
+        "human development index", "hdi", "standard of living"
+      ]
+    },
+    {
+      id: "policy-and-international-economics",
+      label: "Policy and International Economics",
+      keywords: [
+        "fiscal policy", "monetary policy", "supply-side policy",
+        "government intervention", "budget deficit", "budget surplus",
+        "public expenditure", "taxation", "interest rate", "trade protection",
+        "tariff", "quota", "free trade", "globalisation", "wto", "imf",
+        "exchange rate policy", "macroeconomic objectives",
+        // additional keywords / synonyms
+        "expansionary fiscal policy", "contractionary fiscal policy",
+        "direct tax", "indirect tax", "progressive tax", "regressive tax",
+        "proportional tax", "automatic stabiliser", "balanced budget",
+        "public sector debt", "national debt", "budget balance",
+        "expansionary monetary policy", "contractionary monetary policy",
+        "open market operations", "quantitative easing", "policy rate",
+        "privatisation", "deregulation", "labour market reform",
+        "exchange control", "floating exchange rate", "fixed exchange rate",
+        "managed float", "devaluation", "revaluation", "appreciation", "depreciation",
+        "comparative advantage", "absolute advantage", "terms of trade",
+        "customs union", "trade bloc", "protectionism", "dumping",
+        "macroeconomic policy conflict", "sustainable growth"
+      ]
+    }
+  ],
+
+  accounts: [
+    {
+      id: "financial-accounting",
+      label: "Financial Accounting",
+      keywords: [
+        "double entry", "ledger", "journal", "trial balance", "suspense account",
+        "income statement", "statement of financial position", "balance sheet",
+        "depreciation", "accrual", "prepayment", "bad debt", "irrecoverable debt",
+        "allowance for receivables", "bank reconciliation", "capital expenditure",
+        "revenue expenditure", "inventory valuation", "nrv",
+        // additional keywords / synonyms
+        "bookkeeping", "general journal", "sales journal", "purchases journal",
+        "cash book", "petty cash", "control account", "sales ledger control account",
+        "purchases ledger control account", "correction of errors",
+        "error of omission", "error of commission", "error of principle",
+        "depreciation method", "straight line", "reducing balance",
+        "disposal account", "non-current asset", "current asset",
+        "current liability", "non-current liability", "working capital",
+        "year-end adjustment", "provision for depreciation",
+        "inventory", "fifo", "avco", "lower of cost and nrv",
+        "consignment", "incomplete records", "single entry"
+      ]
+    },
+    {
+      id: "published-and-company-accounts",
+      label: "Published and Company Accounts",
+      keywords: [
+        "share capital", "ordinary share", "preference share", "debenture",
+        "retained earnings", "statement of changes in equity", "company accounts",
+        "limited company", "appropriation account", "issue of shares",
+        "bonus issue", "rights issue", "dividend", "reserves",
+        // additional keywords / synonyms
+        "capital reserve", "revaluation reserve", "general reserve",
+        "share premium", "authorised capital", "issued capital", "called-up capital",
+        "redeemable preference shares", "loan note", "interest on debentures",
+        "published accounts", "international accounting standards",
+        "statement of profit or loss", "other comprehensive income",
+        "shareholder equity", "equity finance", "gearing capital structure",
+        "interim dividend", "final dividend", "dividend cover"
+      ]
+    },
+    {
+      id: "cost-and-management-accounting",
+      label: "Cost and Management Accounting",
+      keywords: [
+        "costing", "marginal costing", "absorption costing", "break-even",
+        "contribution", "limiting factor", "budget", "budgeting",
+        "standard costing", "variance", "reconciliation", "overhead",
+        "activity based costing", "relevant cost", "investment appraisal",
+        "payback", "arr", "npv",
+        // additional keywords / synonyms
+        "cost centre", "cost unit", "prime cost", "factory overhead",
+        "apportionment", "allocation of overheads", "under-absorption",
+        "over-absorption", "labour rate variance", "labour efficiency variance",
+        "material price variance", "material usage variance",
+        "fixed budget", "flexed budget", "cash budget", "master budget",
+        "budgeted production", "budgeted sales", "forecasting",
+        "make or buy", "shutdown decision", "accept or reject order",
+        "scarce resource", "contribution per limiting factor",
+        "net present value", "discounted cash flow", "accounting rate of return"
+      ]
+    },
+    {
+      id: "analysis-and-interpretation",
+      label: "Analysis and Interpretation",
+      keywords: [
+        "ratio analysis", "profitability", "liquidity", "trade receivable days",
+        "trade payable days", "inventory turnover", "return on capital employed",
+        "gross profit margin", "net profit margin", "gearing", "efficiency ratio",
+        "cash flow", "statement of cash flows", "interpretation",
+        // additional keywords / synonyms
+        "current ratio", "acid test ratio", "quick ratio", "operating margin",
+        "return on equity", "asset turnover", "interest cover",
+        "earnings per share", "eps", "dividend yield", "price earnings ratio",
+        "cash from operating activities", "investing activities", "financing activities",
+        "cash generated from operations", "cash equivalent",
+        "inter-firm comparison", "trend analysis", "limitations of ratio analysis",
+        "stakeholder interpretation", "performance evaluation"
+      ]
+    }
+  ],
+
+  business: [
+    {
+      id: "business-activity",
+      label: "Business Activity",
+      keywords: [
+        "business objective", "stakeholder", "enterprise", "entrepreneur",
+        "added value", "primary sector", "secondary sector", "tertiary sector",
+        "private sector", "public sector", "social enterprise", "business growth",
+        "location", "size of business", "economies of scale",
+        // additional keywords / synonyms
+        "mission statement", "corporate objective", "profit maximisation",
+        "survival", "growth objective", "market share", "ethics objective",
+        "stakeholder conflict", "shareholder", "employee", "customer", "supplier",
+        "pressure group", "internal growth", "external growth", "merger", "takeover",
+        "integration", "vertical integration", "horizontal integration",
+        "internal economies of scale", "external economies of scale",
+        "multinational", "global business", "business environment"
+      ]
+    },
+    {
+      id: "people-and-operations",
+      label: "People and Operations",
+      keywords: [
+        "motivation", "leadership", "management", "human resource management",
+        "recruitment", "selection", "training", "appraisal", "organisation structure",
+        "span of control", "delegation", "centralisation", "decentralisation",
+        "production", "capacity utilisation", "lean production", "quality assurance",
+        "quality control", "inventory control",
+        // additional keywords / synonyms
+        "maslow", "herzberg", "taylor", "mayo", "motivation theory",
+        "financial motivation", "non-financial motivation", "piece rate",
+        "fringe benefit", "job enrichment", "job rotation", "empowerment",
+        "autocratic", "democratic", "laissez-faire", "leadership style",
+        "line organisation", "matrix structure", "hierarchical structure",
+        "chain of command", "delayering", "communication channel",
+        "flow production", "job production", "batch production",
+        "operations management", "labour productivity", "capital intensive",
+        "labour intensive", "stock control", "buffer stock", "just in time",
+        "kaizen", "total quality management", "tqm", "benchmarking"
+      ]
+    },
+    {
+      id: "marketing-and-finance",
+      label: "Marketing and Finance",
+      keywords: [
+        "marketing", "market research", "market segmentation", "marketing mix",
+        "product", "price", "promotion", "place", "branding", "elasticity",
+        "budget", "cash flow", "income statement", "statement of financial position",
+        "sources of finance", "working capital", "break-even", "contribution",
+        "investment appraisal", "profitability",
+        // additional keywords / synonyms
+        "primary research", "secondary research", "questionnaire", "sampling",
+        "consumer market", "industrial market", "niche market", "mass market",
+        "market size", "market growth", "product life cycle", "extension strategy",
+        "penetration pricing", "skimming", "competitive pricing",
+        "price elasticity", "promotion mix", "advertising", "sales promotion",
+        "public relations", "direct marketing", "e-commerce",
+        "start-up capital", "long-term finance", "short-term finance",
+        "share issue", "loan capital", "trade credit", "overdraft",
+        "cash flow forecast", "cash budget", "gross profit", "net profit",
+        "payback period", "arr", "liquidity", "gearing"
+      ]
+    },
+    {
+      id: "strategy-and-external-environment",
+      label: "Strategy and External Environment",
+      keywords: [
+        "strategy", "strategic management", "corporate planning", "swot",
+        "pest", "decision tree", "critical path analysis", "contingency planning",
+        "change management", "globalisation", "multinational", "external environment",
+        "competition", "government intervention", "exchange rate", "inflation",
+        "business ethics", "corporate social responsibility",
+        // additional keywords / synonyms
+        "strategic choice", "strategy implementation", "strategic analysis",
+        "ansoff matrix", "force field analysis", "decision node", "chance node",
+        "expected value", "network analysis", "float time", "crash time",
+        "organisational change", "resistance to change", "culture",
+        "political factor", "economic factor", "social factor", "technological factor",
+        "legal factor", "environmental factor", "porter five forces",
+        "competitive advantage", "csr", "ethics", "sustainability",
+        "exchange rate risk", "interest rate", "recession", "economic boom"
+      ]
+    }
+  ],
+
   "computer-science": [
     {
       id: "ch01-information-representation",
