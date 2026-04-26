@@ -1716,3 +1716,40 @@ TOPICS_A.physics.paperTopics = {
     ])
   }
 };
+
+TOPICS_A.chemistry.paperTopics = {
+  "paper-1": {
+    label: "AS Chemistry Multiple Choice",
+    topics: topicsFor("chemistry", [
+      "physical-chemistry", "inorganic-chemistry", "organic-chemistry",
+      "analysis-and-techniques"
+    ])
+  },
+  "paper-2": {
+    label: "AS Chemistry Structured Questions",
+    topics: topicsFor("chemistry", [
+      "physical-chemistry", "inorganic-chemistry", "organic-chemistry",
+      "analysis-and-techniques"
+    ])
+  },
+  "paper-3": {
+    label: "Advanced Practical Skills",
+    topics: topicsFor("chemistry", [
+      "analysis-and-techniques", "physical-chemistry", "inorganic-chemistry",
+      "organic-chemistry"
+    ])
+  },
+  "paper-4": {
+    label: "A Level Chemistry Structured Questions",
+    topics: topicsFor("chemistry", [
+      "physical-chemistry", "inorganic-chemistry", "organic-chemistry",
+      "analysis-and-techniques"
+    ])
+  },
+  "paper-5": {
+    label: "Planning, Analysis and Evaluation",
+    topics: topicsFor("chemistry", [
+      "analysis-and-techniques", "physical-chemistry"
+    ])
+  }
+};
