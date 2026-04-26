@@ -1812,3 +1812,32 @@ TOPICS_A.accounts.paperTopics = {
     ])
   }
 };
+
+TOPICS_A.business.paperTopics = {
+  "paper-1": {
+    label: "AS Business Short Answer and Essay",
+    topics: topicsFor("business", [
+      "business-activity", "people-and-operations", "marketing-and-finance"
+    ])
+  },
+  "paper-2": {
+    label: "AS Business Data Response",
+    topics: topicsFor("business", [
+      "business-activity", "people-and-operations", "marketing-and-finance"
+    ])
+  },
+  "paper-3": {
+    label: "A Level Business Decision-Making",
+    topics: topicsFor("business", [
+      "business-activity", "people-and-operations", "marketing-and-finance",
+      "strategy-and-external-environment"
+    ])
+  },
+  "paper-4": {
+    label: "A Level Business Strategy",
+    topics: topicsFor("business", [
+      "strategy-and-external-environment", "business-activity",
+      "people-and-operations", "marketing-and-finance"
+    ])
+  }
+};
