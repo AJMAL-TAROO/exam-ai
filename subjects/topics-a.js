@@ -1875,3 +1875,30 @@ TOPICS_A["computer-science"].paperTopics = {
     ])
   }
 };
+
+TOPICS_A.english.paperTopics = {
+  "paper-1": {
+    label: "English Language Reading",
+    topics: topicsFor("english", [
+      "reading-comprehension", "language-analysis", "summary-writing"
+    ])
+  },
+  "paper-2": {
+    label: "English Language Writing",
+    topics: topicsFor("english", [
+      "writing-directed", "writing-composition"
+    ])
+  },
+  "paper-3": {
+    label: "English Language Analysis",
+    topics: topicsFor("english", [
+      "language-analysis", "reading-comprehension"
+    ])
+  },
+  "paper-4": {
+    label: "English Language Topics",
+    topics: topicsFor("english", [
+      "language-analysis", "writing-directed", "writing-composition"
+    ])
+  }
+};
