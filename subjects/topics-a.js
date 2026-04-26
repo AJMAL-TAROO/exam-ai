@@ -1782,3 +1782,33 @@ TOPICS_A.economics.paperTopics = {
     ])
   }
 };
+
+TOPICS_A.accounts.paperTopics = {
+  "paper-1": {
+    label: "Accounting Multiple Choice",
+    topics: topicsFor("accounts", [
+      "financial-accounting", "published-and-company-accounts",
+      "cost-and-management-accounting", "analysis-and-interpretation"
+    ])
+  },
+  "paper-2": {
+    label: "Accounting Fundamentals",
+    topics: topicsFor("accounts", [
+      "financial-accounting", "cost-and-management-accounting",
+      "analysis-and-interpretation"
+    ])
+  },
+  "paper-3": {
+    label: "Financial Accounting",
+    topics: topicsFor("accounts", [
+      "financial-accounting", "published-and-company-accounts",
+      "analysis-and-interpretation"
+    ])
+  },
+  "paper-4": {
+    label: "Cost and Management Accounting",
+    topics: topicsFor("accounts", [
+      "cost-and-management-accounting", "analysis-and-interpretation"
+    ])
+  }
+};
