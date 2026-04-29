@@ -6,7 +6,6 @@
  */
 
 import {
-  filterPdfsBySubjectLevel,
   buildIndex,
   generatePaper,
   loadPdf,
@@ -331,14 +330,7 @@ async function onScanClick() {
     state.allUrls = urlsToScan;
     setStatus("scan", `Scanning ${urlsToScan.length} PDF(s)…`);
 
-    state.matchedUrls = await filterPdfsBySubjectLevel(
-      urlsToScan,
-      subjectKey,
-      levelKey,
-      (done, total) => {
-        setStatus("scan", `Scanning… ${done}/${total}`);
-      }
-    );
+    state.matchedUrls = urlsToScan;
 
     if (state.matchedUrls.length === 0) {
       setStatus(
