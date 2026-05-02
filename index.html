@@ -703,16 +703,15 @@
     <div id="paper-select-status" class="status status--info" hidden></div>
   </section>
 
-  <!-- ── Step 4: Scan ───────────────────────────────────────── -->
+  <!-- ── Step 4: Load Files ─────────────────────────────────── -->
   <section class="card" id="scan-section" hidden>
-    <h2><span class="step-badge">4</span> Scan PDF Library</h2>
+    <h2><span class="step-badge">4</span> Load Files</h2>
     <p style="margin:0 0 0.75rem; font-size:0.875rem; color:var(--color-muted);">
-      Reads the first page of each bundled PDF and filters to those matching
-      your chosen subject using keyword detection.
+      Loads the PDF list for your selected subject and paper from the manifest.
     </p>
     <button class="btn btn-primary" id="scan-btn"
-            data-loading-text="Scanning…">
-      🔍 Scan PDFs
+            data-loading-text="Loading files...">
+      Loading files...
     </button>
     <div id="scan-status" class="status status--info" hidden></div>
   </section>
@@ -721,11 +720,11 @@
   <section class="card" id="index-section" hidden>
     <h2><span class="step-badge">5</span> Build Question Index</h2>
     <p style="margin:0 0 0.75rem; font-size:0.875rem; color:var(--color-muted);">
-      Extracts and indexes all questions from the matched PDFs.
+      Extracts and indexes all questions from the loaded PDFs.
       This may take a moment for large papers.
     </p>
 
-    <!-- PDF selection (populated by JS after scan) -->
+    <!-- PDF selection (populated by JS after loading files) -->
     <div id="pdf-selector" hidden>
       <p style="margin:0 0 0.3rem; font-weight:500; font-size:0.9rem;">PDFs to index</p>
       <div class="pdf-selector-controls">

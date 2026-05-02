@@ -21,8 +21,8 @@ const state = {
   subject: null,        // subject key from manifest / topics map
   paperNumber: null,    // numeric paper number for A-Level subjects
   allUrls: [],          // all URLs from manifest for chosen level/paper
-  matchedUrls: [],      // filtered URLs after scanning
-  selectedPdfUrls: [],  // user-selected subset of matchedUrls for indexing
+  matchedUrls: [],      // URLs loaded from the manifest for the selected paper
+  selectedPdfUrls: [],  // user-selected subset of loaded PDF URLs for indexing
   questionIndex: [],    // built index
   manifest: null,       // loaded manifest.json
   topics: [],           // current topic list
@@ -277,11 +277,11 @@ function onPaperChange(e) {
   }
 }
 
-// ─── Step 3: Scan PDFs ────────────────────────────────────────────────────────
+// ─── Step 3: Load Files ───────────────────────────────────────────────────────
 
-async function onScanClick() {
+async function onLoadFilesClick() {
   setLoading("scan-btn", true);
-  setStatus("scan", "Loading manifest…");
+  setStatus("scan", "Loading files...");
   hideSection("index-section");
   hideSection("generate-section");
   hideSection("paper-section");
@@ -294,18 +294,18 @@ async function onScanClick() {
     const levelKey = state.level;
     const subjectKey = state.subject;
 
-    let urlsToScan;
+    let urlsToLoad;
 
     if (levelKey === "a-level" && state.paperNumber) {
       // Paper-specific path for all A-Level subjects
       const subjectData = manifest[levelKey]?.[subjectKey];
       const paperKey = `paper-${state.paperNumber}`;
       if (subjectData && typeof subjectData === "object" && !Array.isArray(subjectData)) {
-        urlsToScan = subjectData[paperKey] || [];
+        urlsToLoad = subjectData[paperKey] || [];
       } else {
-        urlsToScan = [];
+        urlsToLoad = [];
       }
-      if (urlsToScan.length === 0) {
+      if (urlsToLoad.length === 0) {
         setStatus(
           "scan",
           `No PDFs found in manifest for Paper ${state.paperNumber}. ` +
@@ -319,30 +319,30 @@ async function onScanClick() {
     } else {
       // O-Level flow — use flat subject array from manifest
       const subjectData = manifest[levelKey]?.[subjectKey];
-      urlsToScan = Array.isArray(subjectData) ? subjectData : [];
-      if (urlsToScan.length === 0) {
+      urlsToLoad = Array.isArray(subjectData) ? subjectData : [];
+      if (urlsToLoad.length === 0) {
         setStatus("scan", "No PDFs found in manifest for this subject. Add PDFs and update manifest.json.", "warn");
         setLoading("scan-btn", false);
         return;
       }
     }
 
-    state.allUrls = urlsToScan;
-    setStatus("scan", `Scanning ${urlsToScan.length} PDF(s)…`);
+    state.allUrls = urlsToLoad;
+    setStatus("scan", "Loading files...");
 
-    state.matchedUrls = urlsToScan;
+    state.matchedUrls = urlsToLoad;
 
     if (state.matchedUrls.length === 0) {
       setStatus(
         "scan",
-        `No PDFs matched ${subjectKey} / ${levelKey}. Check your manifest and PDF filenames.`,
+        `No PDFs found for ${subjectKey} / ${levelKey}. Check your manifest and PDF filenames.`,
         "warn"
       );
     } else {
       const paperLabel = state.paperNumber ? ` Paper ${state.paperNumber}` : "";
       setStatus(
         "scan",
-        `✓ Matched ${state.matchedUrls.length} PDF(s) for ${subjectKey}${paperLabel} (${levelKey}).`,
+        `✓ Loaded ${state.matchedUrls.length} PDF(s) for ${subjectKey}${paperLabel} (${levelKey}).`,
         "success"
       );
       renderPdfSelector();
@@ -359,7 +359,7 @@ async function onScanClick() {
 
 async function onBuildIndexClick() {
   // Derive selected URLs from checked checkboxes.
-  // If the selector was not rendered (no matched PDFs yet), fall back to all matched URLs.
+  // If the selector was not rendered yet, fall back to all loaded URLs.
   const selectorVisible = !$("pdf-selector").hidden;
   const checkedBoxes = document.querySelectorAll(".pdf-cb:checked");
 
@@ -433,7 +433,7 @@ function resetPdfSelectorAndReport() {
 }
 
 /**
- * Build the PDF checkbox list inside #pdf-selector from state.matchedUrls.
+ * Build the PDF checkbox list inside #pdf-selector from loaded manifest URLs.
  * All PDFs are checked by default.
  */
 function renderPdfSelector() {
@@ -1023,7 +1023,7 @@ function init() {
   $("subject-select").addEventListener("change", onSubjectChange);
 
   // Scan
-  $("scan-btn").addEventListener("click", onScanClick);
+  $("scan-btn").addEventListener("click", onLoadFilesClick);
 
   // PDF selector — Select all / Deselect all
   $("pdf-select-all").addEventListener("click", () => {

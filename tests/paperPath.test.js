@@ -133,7 +133,7 @@ test("contains exactly 1, 2, 3, 4", () => {
 console.log("\nManifest paper-URL lookup (simulated)");
 
 /**
- * Mirrors the lookup logic used in app.js onScanClick for CS A-Level.
+ * Mirrors the lookup logic used in app.js onLoadFilesClick for CS A-Level.
  * @param {object} manifest
  * @param {string} level
  * @param {string} subject

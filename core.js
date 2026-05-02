@@ -4,7 +4,6 @@
  * Depends on PDF.js loaded globally as `pdfjsLib` (ESM via CDN).
  */
 
-import { detectSubject, detectLevel } from "./subjects/subject-detect.js";
 import { augmentWithHybridScores } from "./topicScorer.js";
 
 // ─── PDF.js helpers ──────────────────────────────────────────────────────────
@@ -249,8 +248,6 @@ function isBoldItem(styles, item) {
  * remove legitimate question-number markers that appear in the body of a page.
  * (e.g. "6" alone on a line in the body is Cambridge style for starting Q6.)
  *
- * cleanPageText still applies it unconditionally because that function is used
- * for keyword-based subject/level scanning where question numbers are irrelevant.
  */
 const STANDALONE_NUMBER_RE = /^\s*\d+\s*$/;
 
@@ -260,8 +257,7 @@ const STANDALONE_NUMBER_RE = /^\s*\d+\s*$/;
  *
  * NOTE: STANDALONE_NUMBER_RE is intentionally NOT in this list so that
  * isContentLine (used by splitIntoQuestions with position awareness) keeps
- * standalone numbers in the body of a page.  cleanPageText adds the filter
- * back for the scanning path where question numbers are irrelevant.
+ * standalone numbers in the body of a page.
  */
 const NOISE_PATTERNS = [
   /^\s*turn\s+over\s*$/i,
@@ -337,22 +333,6 @@ const BLANK_PAGE_RE = /^[\x01\x02\x03]*\s*(blank\s+page|this\s+page\s+is\s+inten
  */
 function isBlankPage(rawPageText) {
   return BLANK_PAGE_RE.test(rawPageText);
-}
-
-/**
- * Clean a page's raw text.
- * Used for subject/level keyword scanning where question numbers are irrelevant,
- * so standalone numbers are filtered out here (along with all other noise).
- * All prefix markers inserted by extractPageText are stripped from each line.
- * @param {string} pageText
- * @returns {string}
- */
-export function cleanPageText(pageText) {
-  return pageText
-    .split("\n")
-    .map(stripPrefixes)
-    .filter((line) => isContentLine(line) && !STANDALONE_NUMBER_RE.test(line))
-    .join("\n");
 }
 
 // ─── Question splitting ───────────────────────────────────────────────────────
@@ -1197,54 +1177,4 @@ export function generatePaper(index, { topics = null, count = 10, seed = null })
   const effectiveSeed = seed !== null ? (seed >>> 0) : (Math.random() * 0x100000000) >>> 0;
   const shuffled = seededShuffle(pool, effectiveSeed);
   return shuffled.slice(0, Math.min(count, shuffled.length));
-}
-
-// ─── First-page scan ──────────────────────────────────────────────────────────
-
-/**
- * Scan the first page of a PDF and return its cleaned text.
- * Used to detect subject/level without processing the whole PDF.
- *
- * @param {string} url
- * @returns {Promise<string>}
- */
-export async function scanFirstPage(url) {
-  const pdfDoc = await loadPdf(url);
-  const page = await pdfDoc.getPage(1);
-  const raw = await extractPageText(page);
-  return cleanPageText(raw);
-}
-
-/**
- * Filter PDF URLs by subject and level using first-page keyword detection.
- *
- * @param {string[]} urls — all PDFs for a chosen level bucket
- * @param {string} subject — 'maths' | 'physics' | 'computer-science'
- * @param {string} level   — 'o-level' | 'a-level'
- * @param {(done: number, total: number) => void} [onProgress]
- * @returns {Promise<string[]>} URLs whose first page matches subject+level
- */
-export async function filterPdfsBySubjectLevel(urls, subject, level, onProgress) {
-  // Deduplicate URLs before scanning so the same PDF is never processed twice.
-  const uniqueUrls = [...new Set(urls)];
-  const matched = [];
-  for (let i = 0; i < uniqueUrls.length; i++) {
-    if (onProgress) onProgress(i, uniqueUrls.length);
-    try {
-      const text = await scanFirstPage(uniqueUrls[i]);
-      const detectedSubject = detectSubject(text);
-      const detectedLevel = detectLevel(text);
-      // Accept if subject matches; level may be null (ambiguous first page)
-      if (
-        detectedSubject === subject &&
-        (detectedLevel === null || detectedLevel === level)
-      ) {
-        matched.push(uniqueUrls[i]);
-      }
-    } catch (err) {
-      console.warn(`Scan failed for ${uniqueUrls[i]}:`, err);
-    }
-  }
-  if (onProgress) onProgress(uniqueUrls.length, uniqueUrls.length);
-  return matched;
 }
