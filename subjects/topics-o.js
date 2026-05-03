@@ -437,72 +437,305 @@ export const TOPICS_O = {
       ]
     }
   ],
-  "english": [
+
+  accounts: [
     {
-      id: "reading-comprehension",
-      label: "Reading – Comprehension",
+      id: "accounting-principles",
+      label: "Accounting Principles",
       keywords: [
-        "comprehension", "passage", "extract", "reading", "infer", "inference",
-        "deduce", "deduction", "summary", "summarise", "summarize",
-        "main idea", "supporting detail", "tone", "mood", "atmosphere",
-        "purpose", "audience", "effect", "evidence", "quote", "reference",
-        "implicit", "explicit", "connotation", "denotation",
-        "fact", "opinion", "bias", "perspective", "viewpoint",
-        "argue", "persuade", "inform", "entertain",
-        "headline", "caption", "heading", "subheading",
-        "formal", "informal", "register", "address"
+        "accounting", "bookkeeping", "business entity", "money measurement",
+        "going concern", "consistency", "prudence", "materiality", "accruals",
+        "matching", "realisation", "historical cost", "double entry", "debit",
+        "credit", "ledger", "account", "transaction", "source document",
+        "invoice", "receipt", "credit note", "debit note"
       ]
     },
     {
-      id: "language-analysis",
-      label: "Language Analysis",
+      id: "books-of-prime-entry",
+      label: "Books of Prime Entry",
       keywords: [
-        "language", "technique", "device", "metaphor", "simile", "personification",
-        "alliteration", "onomatopoeia", "imagery", "symbolism", "hyperbole",
-        "irony", "sarcasm", "oxymoron", "juxtaposition", "contrast",
-        "repetition", "rhetorical question", "emotive language", "sensory",
-        "adjective", "adverb", "verb", "noun", "tense", "active voice",
-        "passive voice", "sentence structure", "short sentence", "complex sentence",
-        "compound sentence", "paragraph", "discourse marker",
-        "descriptive", "narrative", "dialogue", "syntax", "diction",
-        "word choice", "connotation", "figurative language", "literal"
+        "book of prime entry", "day book", "sales journal", "purchases journal",
+        "returns inwards", "returns outwards", "cash book", "petty cash book",
+        "analysed cash book", "bank column", "cash column", "discount allowed",
+        "discount received", "posting", "ledger", "control account", "sales ledger",
+        "purchases ledger", "general ledger"
       ]
     },
     {
-      id: "writing-directed",
-      label: "Writing – Directed",
+      id: "trial-balance-and-errors",
+      label: "Trial Balance & Errors",
       keywords: [
-        "directed writing", "format", "layout", "letter", "report", "speech",
-        "article", "interview", "diary", "email", "review", "leaflet",
-        "newsletter", "formal letter", "informal letter", "salutation",
-        "sign off", "introduction", "conclusion", "paragraph structure",
-        "address", "subject", "greeting", "purpose", "audience", "register",
-        "persuasive", "discursive", "analytical", "advisory", "descriptive",
-        "plan", "draft", "redraft", "proofread", "edit"
+        "trial balance", "balance", "error", "suspense account", "correction",
+        "omission", "commission", "principle", "compensating", "original entry",
+        "complete reversal", "transposition", "casting error", "journal entry",
+        "adjustment", "contra", "opening balance", "closing balance"
       ]
     },
     {
-      id: "writing-composition",
-      label: "Writing – Composition",
+      id: "financial-statements",
+      label: "Financial Statements",
       keywords: [
-        "composition", "creative writing", "narrative", "descriptive writing",
-        "story", "plot", "character", "setting", "theme", "conflict",
-        "resolution", "climax", "opening", "ending", "structure",
-        "first person", "third person", "point of view", "narration",
-        "dialogue", "show don't tell", "atmosphere", "tension",
-        "pace", "vivid", "engaging", "cohesion", "coherence",
-        "vocabulary", "sophisticated", "varied sentence", "expression",
-        "original", "creative", "imaginative"
+        "income statement", "statement of financial position", "balance sheet",
+        "trading account", "profit and loss", "gross profit", "profit for the year",
+        "sales", "revenue", "cost of sales", "purchases", "inventory", "drawings",
+        "capital", "asset", "liability", "equity", "expense", "income",
+        "depreciation", "bad debt", "provision for doubtful debts", "prepayment",
+        "accrual"
       ]
     },
     {
-      id: "summary-writing",
-      label: "Summary Writing",
+      id: "bank-reconciliation",
+      label: "Bank Reconciliation",
       keywords: [
-        "summary", "summarise", "summarize", "key point", "main point",
-        "select", "identify", "own words", "paraphrase", "concise",
-        "relevant", "irrelevant", "word limit", "note", "lift",
-        "directly quote", "bullet point", "condense", "précis"
+        "bank reconciliation", "bank statement", "cash book", "unpresented cheque",
+        "uncredited deposit", "standing order", "direct debit", "bank charges",
+        "dishonoured cheque", "credit transfer", "overdraft", "balance per bank",
+        "balance per cash book", "reconcile", "adjusted cash book"
+      ]
+    },
+    {
+      id: "partnerships-clubs-and-manufacturing",
+      label: "Partnerships, Clubs & Manufacturing",
+      keywords: [
+        "partnership", "partner", "appropriation account", "current account",
+        "capital account", "interest on capital", "interest on drawings", "salary",
+        "profit sharing ratio", "club", "subscriptions", "receipts and payments",
+        "income and expenditure", "accumulated fund", "manufacturing account",
+        "prime cost", "factory overhead", "work in progress", "production cost"
+      ]
+    },
+    {
+      id: "accounting-ratios",
+      label: "Accounting Ratios",
+      keywords: [
+        "ratio", "profitability", "liquidity", "gross profit margin",
+        "profit margin", "mark-up", "return on capital employed", "ROCE",
+        "current ratio", "acid test ratio", "quick ratio", "inventory turnover",
+        "trade receivables collection period", "trade payables payment period",
+        "interpret", "compare", "performance"
+      ]
+    }
+  ],
+
+  business: [
+    {
+      id: "business-activity",
+      label: "Business Activity",
+      keywords: [
+        "business activity", "need", "want", "goods", "services", "scarcity",
+        "opportunity cost", "factor of production", "land", "labour", "capital",
+        "enterprise", "entrepreneur", "added value", "primary sector",
+        "secondary sector", "tertiary sector", "objective", "profit", "growth",
+        "survival", "market share", "stakeholder"
+      ]
+    },
+    {
+      id: "people-in-business",
+      label: "People in Business",
+      keywords: [
+        "employee", "employer", "manager", "recruitment", "selection",
+        "training", "motivation", "leadership", "communication", "teamwork",
+        "organisation chart", "span of control", "chain of command",
+        "delegation", "wage", "salary", "piece rate", "bonus", "job satisfaction",
+        "human resource", "redundancy", "dismissal"
+      ]
+    },
+    {
+      id: "marketing",
+      label: "Marketing",
+      keywords: [
+        "marketing", "market research", "primary research", "secondary research",
+        "questionnaire", "survey", "sample", "market segment", "target market",
+        "product", "price", "place", "promotion", "marketing mix", "advertising",
+        "brand", "packaging", "sales", "demand", "supply", "competition",
+        "customer", "consumer"
+      ]
+    },
+    {
+      id: "operations-management",
+      label: "Operations Management",
+      keywords: [
+        "production", "operations", "productivity", "efficiency", "quality",
+        "quality control", "quality assurance", "inventory", "stock", "supplier",
+        "raw material", "job production", "batch production", "flow production",
+        "lean production", "just in time", "location", "technology", "capacity",
+        "economies of scale"
+      ]
+    },
+    {
+      id: "finance",
+      label: "Finance",
+      keywords: [
+        "finance", "capital", "source of finance", "loan", "overdraft",
+        "share capital", "retained profit", "cash flow", "cash-flow forecast",
+        "break-even", "fixed cost", "variable cost", "total cost", "revenue",
+        "profit", "loss", "margin of safety", "budget", "income statement",
+        "balance sheet"
+      ]
+    },
+    {
+      id: "external-influences",
+      label: "External Influences",
+      keywords: [
+        "external influence", "government", "tax", "subsidy", "law", "regulation",
+        "consumer protection", "employment law", "environment", "pollution",
+        "exchange rate", "interest rate", "inflation", "unemployment",
+        "globalisation", "competition", "ethics", "social responsibility",
+        "pressure group", "economic growth"
+      ]
+    }
+  ],
+
+  chemistry: [
+    {
+      id: "particles-and-separation",
+      label: "Particles & Separation",
+      keywords: [
+        "solid", "liquid", "gas", "particle", "kinetic theory", "diffusion",
+        "melting", "boiling", "freezing", "condensation", "sublimation",
+        "mixture", "pure substance", "filtration", "crystallisation",
+        "distillation", "fractional distillation", "chromatography", "solvent",
+        "solute", "solution", "residue", "filtrate", "Rf value"
+      ]
+    },
+    {
+      id: "atomic-structure-and-bonding",
+      label: "Atomic Structure & Bonding",
+      keywords: [
+        "atom", "element", "compound", "molecule", "proton", "neutron",
+        "electron", "nucleus", "atomic number", "mass number", "isotope",
+        "electronic configuration", "shell", "periodic table", "group", "period",
+        "metal", "non-metal", "ionic bonding", "covalent bonding", "ion",
+        "lattice", "structure", "formula"
+      ]
+    },
+    {
+      id: "stoichiometry",
+      label: "Stoichiometry",
+      keywords: [
+        "relative atomic mass", "relative molecular mass", "Ar", "Mr", "mole",
+        "Avogadro", "empirical formula", "molecular formula", "balanced equation",
+        "stoichiometry", "limiting reagent", "concentration", "mol/dm3",
+        "gas volume", "percentage yield", "percentage purity", "mass", "volume",
+        "titration", "calculation"
+      ]
+    },
+    {
+      id: "chemical-reactions",
+      label: "Chemical Reactions",
+      keywords: [
+        "chemical reaction", "reactant", "product", "word equation",
+        "symbol equation", "oxidation", "reduction", "redox", "combustion",
+        "thermal decomposition", "displacement", "neutralisation", "precipitation",
+        "rate of reaction", "catalyst", "collision theory", "activation energy",
+        "exothermic", "endothermic", "reversible reaction", "equilibrium"
+      ]
+    },
+    {
+      id: "acids-bases-and-salts",
+      label: "Acids, Bases & Salts",
+      keywords: [
+        "acid", "base", "alkali", "salt", "pH", "indicator", "litmus",
+        "methyl orange", "neutralisation", "hydrogen ion", "hydroxide ion",
+        "carbonate", "nitrate", "sulfate", "chloride", "ammonium", "soluble",
+        "insoluble", "preparation of salts", "crystallisation", "titration"
+      ]
+    },
+    {
+      id: "metals-and-electrolysis",
+      label: "Metals & Electrolysis",
+      keywords: [
+        "metal", "reactivity series", "potassium", "sodium", "calcium",
+        "magnesium", "aluminium", "zinc", "iron", "copper", "silver",
+        "extraction", "ore", "reduction", "blast furnace", "alloy", "corrosion",
+        "rusting", "electrolysis", "electrolyte", "electrode", "anode",
+        "cathode", "ionic compound", "molten", "aqueous"
+      ]
+    },
+    {
+      id: "organic-chemistry",
+      label: "Organic Chemistry",
+      keywords: [
+        "organic chemistry", "hydrocarbon", "alkane", "alkene", "alcohol",
+        "carboxylic acid", "homologous series", "functional group", "isomer",
+        "crude oil", "petroleum", "fractional distillation", "cracking",
+        "combustion", "addition reaction", "polymer", "monomer",
+        "polymerisation", "ethanol", "ethanoic acid", "ester"
+      ]
+    },
+    {
+      id: "environment-and-industry",
+      label: "Environment & Industry",
+      keywords: [
+        "air", "water", "pollution", "pollutant", "carbon dioxide",
+        "carbon monoxide", "sulfur dioxide", "nitrogen oxide", "acid rain",
+        "greenhouse effect", "global warming", "fertiliser", "ammonia",
+        "Haber process", "contact process", "sulfuric acid", "limestone",
+        "water treatment", "recycling", "sustainability"
+      ]
+    }
+  ],
+
+  economics: [
+    {
+      id: "basic-economic-problem",
+      label: "Basic Economic Problem",
+      keywords: [
+        "scarcity", "choice", "opportunity cost", "needs", "wants",
+        "economic problem", "factor of production", "land", "labour",
+        "capital", "enterprise", "resource allocation", "production possibility",
+        "PPC", "specialisation", "division of labour", "exchange"
+      ]
+    },
+    {
+      id: "market-forces",
+      label: "Market Forces",
+      keywords: [
+        "demand", "supply", "price", "market", "equilibrium", "shortage",
+        "surplus", "elasticity", "price elasticity of demand", "PED",
+        "price elasticity of supply", "PES", "substitute", "complement",
+        "consumer surplus", "producer surplus", "market failure"
+      ]
+    },
+    {
+      id: "government-and-macroeconomy",
+      label: "Government & Macroeconomy",
+      keywords: [
+        "government", "tax", "subsidy", "public spending", "budget",
+        "fiscal policy", "monetary policy", "interest rate", "inflation",
+        "unemployment", "economic growth", "GDP", "standard of living",
+        "balance of payments", "exchange rate", "recession", "aggregate demand"
+      ]
+    },
+    {
+      id: "firms-and-production",
+      label: "Firms & Production",
+      keywords: [
+        "firm", "business", "production", "cost", "fixed cost", "variable cost",
+        "total cost", "average cost", "revenue", "profit", "productivity",
+        "economies of scale", "diseconomies of scale", "competition", "monopoly",
+        "market structure", "private sector", "public sector"
+      ]
+    },
+    {
+      id: "labour-market",
+      label: "Labour Market",
+      keywords: [
+        "labour", "worker", "wage", "salary", "employment", "unemployment",
+        "trade union", "productivity", "specialisation", "mobility of labour",
+        "minimum wage", "labour force", "occupation", "training", "skills",
+        "derived demand", "participation rate"
+      ]
+    },
+    {
+      id: "international-trade-and-development",
+      label: "International Trade & Development",
+      keywords: [
+        "international trade", "import", "export", "tariff", "quota",
+        "protectionism", "free trade", "exchange rate", "balance of trade",
+        "current account", "globalisation", "development", "developing country",
+        "developed country", "poverty", "income distribution", "aid",
+        "foreign investment", "multinational", "comparative advantage"
       ]
     }
   ]
