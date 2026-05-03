@@ -15,8 +15,8 @@ any modern browser.
 
 ## Features
 
-- **Level selector** — O Level (IGCSE) or A Level (AS & A Level)
-- **Subject selector** — Mathematics, Physics, Computer Science, or English Language
+- **Level selector** - O Level (IGCSE), A Level (AS & A Level), or NCE
+- **Subject selector** - subjects listed in `assets/manifest.json`
 - **Paper selector** — for A-Level subjects, choose Paper 1, 2, 3, or 4 (defaults to Paper 1)
 - **PDF scanning** — reads the first page of each bundled PDF and identifies
   matching papers using keyword detection (no syllabus codes required)
@@ -42,8 +42,9 @@ exam-ai/
 ├── package.json            # npm test script (no runtime dependencies)
 ├── subjects/
 │   ├── subject-detect.js   # Keyword-based subject/level detection
-│   ├── topics-o.js         # O Level topic lists (Maths, Physics, CS, English)
-│   └── topics-a.js         # A Level topic lists (Maths, Physics, CS, English)
+â”‚   â”œâ”€â”€ topics-o.js         # O Level topic lists
+â”‚   â”œâ”€â”€ topics-a.js         # A Level topic lists
+â”‚   â””â”€â”€ topics-nce.js       # NCE topic lists
 ├── tests/
 │   ├── topicScorer.test.js # Unit tests for the hybrid scorer
 │   └── paperPath.test.js   # Unit tests for buildPaperPath and manifest lookup
@@ -64,7 +65,6 @@ exam-ai/
    │   ├── maths/              ← O Level Maths papers here
    │   ├── physics/
    │   ├── computer-science/
-   │   └── english/
    └── a-level/
        ├── maths/
        │   └── question-papers/
@@ -85,12 +85,6 @@ exam-ai/
        │   │   ├── paper-3/
        │   │   └── paper-4/
        │   └── marking-scheme/ ← A Level CS mark schemes (future use)
-       └── english/
-           └── question-papers/
-               ├── paper-1/    ← A Level English Paper 1 question papers here
-               ├── paper-2/
-               ├── paper-3/
-               └── paper-4/
    ```
 
    > **Note:** Only text-based (not scanned/image) PDFs are supported.
@@ -112,8 +106,7 @@ exam-ai/
      "o-level": {
        "maths":            ["assets/o-level/maths/math_2023_p1.pdf"],
        "physics":          ["assets/o-level/physics/phys_2023_p1.pdf"],
-       "computer-science": [],
-       "english":          []
+       "computer-science": []
      }
    }
    ```
@@ -128,7 +121,7 @@ exam-ai/
          "paper-2": [],
          "paper-3": [],
          "paper-4": []
-       },
+       }
        "computer-science": {
          "paper-1": [
            "assets/a-level/computer-science/question-papers/paper-1/9618_w23_qp_11.pdf"
@@ -137,12 +130,6 @@ exam-ai/
          "paper-3": [],
          "paper-4": []
        },
-       "english": {
-         "paper-1": [],
-         "paper-2": [],
-         "paper-3": [],
-         "paper-4": []
-       }
      }
    }
    ```

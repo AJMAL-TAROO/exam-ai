@@ -12,6 +12,7 @@ import {
 } from "./core.js";
 import { TOPICS_O } from "./subjects/topics-o.js";
 import { TOPICS_A } from "./subjects/topics-a.js";
+import { TOPICS_NCE } from "./subjects/topics-nce.js";
 import { buildPaperPath } from "./pathUtils.js";
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -41,7 +42,6 @@ const SUBJECT_LABELS = {
   accounts: "Accounts",
   business: "Business",
   "computer-science": "Computer Science",
-  english: "English Language",
 };
 
 // ─── DOM refs ─────────────────────────────────────────────────────────────────
@@ -74,9 +74,17 @@ function setLoading(buttonId, loading) {
   btn.textContent = loading ? btn.dataset.loadingText || "Working…" : btn.dataset.originalText;
 }
 
+function getTopicMapForLevel(level) {
+  if (level === "o-level") return TOPICS_O;
+  if (level === "a-level") return TOPICS_A;
+  if (level === "nce") return TOPICS_NCE;
+  return {};
+}
+
 function getTopics() {
   if (!state.level || !state.subject) return [];
-  const subjectTopics = TOPICS_O[state.subject] || TOPICS_A[state.subject] || [];
+  const topicMap = getTopicMapForLevel(state.level);
+  const subjectTopics = topicMap[state.subject] || [];
   const paperKey = state.paperNumber ? `paper-${state.paperNumber}` : null;
   const paperTopics = subjectTopics.paperTopics || subjectTopics;
 
@@ -97,7 +105,8 @@ function getTopics() {
 
 function getTopicGroupLabel() {
   if (!state.level || !state.subject) return "Topics";
-  const subjectTopics = TOPICS_O[state.subject] || TOPICS_A[state.subject];
+  const topicMap = getTopicMapForLevel(state.level);
+  const subjectTopics = topicMap[state.subject];
   if (!subjectTopics) return "Topics";
 
   const paperKey = state.paperNumber ? `paper-${state.paperNumber}` : null;

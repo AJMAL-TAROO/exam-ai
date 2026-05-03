@@ -365,7 +365,6 @@
         "assets/o-level/computer-science/marking-scheme/paper-2/2210_w25_ms_23.pdf"
       ]
     },
-    "english": [],
     "accounts": {
       "question-papers": [
         "assets/o-level/accounts/question-papers/paper-1/7707_s21_qp_11.pdf",
@@ -2256,8 +2255,7 @@
         "assets/nce/business/question-papers/2025_bee-section-a.pdf",
         "assets/nce/business/question-papers/2025_bee-section-b.pdf"
       ],
-      "marking-scheme": [],
-      "examiner-reports": [
+      "marking-scheme": [
         "assets/nce/business/examiner-reports/2020-2021_nce-examiners-report-business-entrepreneurship-education-2020-2021.pdf",
         "assets/nce/business/examiner-reports/2021-2022_nce-2021-2022-bee-examiners-report.pdf",
         "assets/nce/business/examiner-reports/2021-2022_nce-2021-2022-business-entrepreneurship-education-examiners-report.pdf",
@@ -2273,8 +2271,7 @@
         "assets/nce/chemistry/question-papers/2025_chemistry.pdf",
         "assets/nce/chemistry/question-papers/unknown-year_scie-chemistry.pdf"
       ],
-      "marking-scheme": [],
-      "examiner-reports": [
+      "marking-scheme": [
         "assets/nce/chemistry/examiner-reports/2020-2021_nce-examiners-report-chemistry-2020-2021.pdf",
         "assets/nce/chemistry/examiner-reports/2021-2022_nce-2021-2022-chemistry-examiners-report.pdf",
         "assets/nce/chemistry/examiner-reports/2023_nce-2023-examiners-report-chemistry.pdf",
@@ -2289,8 +2286,7 @@
         "assets/nce/computer-science/question-papers/2025_information-communication-technology.pdf",
         "assets/nce/computer-science/question-papers/unknown-year_information-and-communications-technology.pdf"
       ],
-      "marking-scheme": [],
-      "examiner-reports": [
+      "marking-scheme": [
         "assets/nce/computer-science/examiner-reports/2021-2022_nce-2021-2022-information-communication-technology-examiners-report.pdf",
         "assets/nce/computer-science/examiner-reports/2021-2022_nce-examiners-report-information-communication-technology-2021-2022.pdf",
         "assets/nce/computer-science/examiner-reports/2023_nce-2023-examiners-report-ict.pdf",
@@ -2305,8 +2301,7 @@
         "assets/nce/maths/question-papers/2025_mathematics.pdf",
         "assets/nce/maths/question-papers/unknown-year_mathematics.pdf"
       ],
-      "marking-scheme": [],
-      "examiner-reports": [
+      "marking-scheme": [
         "assets/nce/maths/examiner-reports/2021-2022_nce-2021-2022-mathematics-examiners-report.pdf",
         "assets/nce/maths/examiner-reports/2021_nce-examiners-report-mathematics-2021.pdf",
         "assets/nce/maths/examiner-reports/2023_examiner-s-report-nce-mathematics-2023.pdf",
@@ -2321,8 +2316,7 @@
         "assets/nce/physics/question-papers/2025_physics.pdf",
         "assets/nce/physics/question-papers/unknown-year_scie-physics.pdf"
       ],
-      "marking-scheme": [],
-      "examiner-reports": [
+      "marking-scheme": [
         "assets/nce/physics/examiner-reports/2020-2021_nce-examiners-report-physics-2020-2021.pdf",
         "assets/nce/physics/examiner-reports/2021-2022_nce-2021-2022-physics-examiners-report.pdf",
         "assets/nce/physics/examiner-reports/2023_nce-2023-examiners-report-physics.pdf",
