@@ -17,7 +17,7 @@ import { buildPaperPath } from "./pathUtils.js";
 // ─── State ────────────────────────────────────────────────────────────────────
 
 const state = {
-  level: null,          // 'o-level' | 'a-level'
+  level: null,          // 'o-level' | 'a-level' | 'nce'
   subject: null,        // subject key from manifest / topics map
   paperNumber: null,    // numeric paper number for A-Level subjects
   allUrls: [],          // all URLs from manifest for chosen level/paper
@@ -76,8 +76,7 @@ function setLoading(buttonId, loading) {
 
 function getTopics() {
   if (!state.level || !state.subject) return [];
-  const map = state.level === "o-level" ? TOPICS_O : TOPICS_A;
-  const subjectTopics = map[state.subject] || [];
+  const subjectTopics = TOPICS_O[state.subject] || TOPICS_A[state.subject] || [];
   const paperKey = state.paperNumber ? `paper-${state.paperNumber}` : null;
   const paperTopics = subjectTopics.paperTopics || subjectTopics;
 
@@ -98,8 +97,7 @@ function getTopics() {
 
 function getTopicGroupLabel() {
   if (!state.level || !state.subject) return "Topics";
-  const map = state.level === "o-level" ? TOPICS_O : TOPICS_A;
-  const subjectTopics = map[state.subject];
+  const subjectTopics = TOPICS_O[state.subject] || TOPICS_A[state.subject];
   if (!subjectTopics) return "Topics";
 
   const paperKey = state.paperNumber ? `paper-${state.paperNumber}` : null;
@@ -114,6 +112,7 @@ function formatSubjectLabel(subjectKey) {
 }
 
 function getSortedPaperNumbers(subjectData) {
+  subjectData = subjectData?.["question-papers"] || subjectData;
   if (!subjectData || typeof subjectData !== "object" || Array.isArray(subjectData)) {
     return [];
   }
@@ -124,6 +123,27 @@ function getSortedPaperNumbers(subjectData) {
     })
     .filter((num) => Number.isInteger(num))
     .sort((a, b) => a - b);
+}
+
+function getQuestionPaperUrls(subjectData, paperNumber = null) {
+  if (Array.isArray(subjectData)) {
+    return subjectData;
+  }
+
+  if (!subjectData || typeof subjectData !== "object") {
+    return [];
+  }
+
+  const questionPapers = subjectData["question-papers"] || subjectData;
+  if (Array.isArray(questionPapers)) {
+    return questionPapers;
+  }
+
+  if (paperNumber) {
+    return questionPapers[`paper-${paperNumber}`] || [];
+  }
+
+  return [];
 }
 
 function populateSubjectOptions(levelKey, manifest) {
@@ -299,12 +319,7 @@ async function onLoadFilesClick() {
     if (levelKey === "a-level" && state.paperNumber) {
       // Paper-specific path for all A-Level subjects
       const subjectData = manifest[levelKey]?.[subjectKey];
-      const paperKey = `paper-${state.paperNumber}`;
-      if (subjectData && typeof subjectData === "object" && !Array.isArray(subjectData)) {
-        urlsToLoad = subjectData[paperKey] || [];
-      } else {
-        urlsToLoad = [];
-      }
+      urlsToLoad = getQuestionPaperUrls(subjectData, state.paperNumber);
       if (urlsToLoad.length === 0) {
         setStatus(
           "scan",
@@ -319,7 +334,7 @@ async function onLoadFilesClick() {
     } else {
       // O-Level flow — use flat subject array from manifest
       const subjectData = manifest[levelKey]?.[subjectKey];
-      urlsToLoad = Array.isArray(subjectData) ? subjectData : [];
+      urlsToLoad = getQuestionPaperUrls(subjectData);
       if (urlsToLoad.length === 0) {
         setStatus("scan", "No PDFs found in manifest for this subject. Add PDFs and update manifest.json.", "warn");
         setLoading("scan-btn", false);
