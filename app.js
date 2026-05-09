@@ -151,6 +151,13 @@ function formatSubjectLabel(subjectKey) {
 
 function getSortedPaperNumbers(subjectData) {
   subjectData = subjectData?.["question-papers"] || subjectData;
+  if (Array.isArray(subjectData)) {
+    return [...new Set(subjectData
+      .map(getPaperNumberFromUrl)
+      .filter((num) => Number.isInteger(num)))]
+      .sort((a, b) => a - b);
+  }
+
   if (!subjectData || typeof subjectData !== "object" || Array.isArray(subjectData)) {
     return [];
   }
@@ -165,7 +172,9 @@ function getSortedPaperNumbers(subjectData) {
 
 function getQuestionPaperUrls(subjectData, paperNumber = null) {
   if (Array.isArray(subjectData)) {
-    return subjectData;
+    return paperNumber
+      ? subjectData.filter((url) => getPaperNumberFromUrl(url) === paperNumber)
+      : subjectData;
   }
 
   if (!subjectData || typeof subjectData !== "object") {
@@ -174,7 +183,9 @@ function getQuestionPaperUrls(subjectData, paperNumber = null) {
 
   const questionPapers = subjectData["question-papers"] || subjectData;
   if (Array.isArray(questionPapers)) {
-    return questionPapers;
+    return paperNumber
+      ? questionPapers.filter((url) => getPaperNumberFromUrl(url) === paperNumber)
+      : questionPapers;
   }
 
   if (paperNumber) {
@@ -346,7 +357,7 @@ async function onPaperTypeChange(e) {
 
   if (!state.paperType || !state.level || !state.subject) return;
 
-  if (state.level === "a-level") {
+  if (state.level === "a-level" || state.level === "o-level") {
     const manifest = await loadManifest();
     const subjectData = manifest?.[state.level]?.[state.subject];
     const paperNumbers = getCompatiblePaperNumbers(subjectData, state.paperType, state.level, state.subject);
@@ -366,7 +377,7 @@ async function onPaperTypeChange(e) {
       hideSection("scan-section");
       setStatus(
         "paper-select",
-        `No ${PAPER_TYPE_LABELS[state.paperType].toLowerCase()} A-Level PDFs found for this subject.`,
+        `No ${PAPER_TYPE_LABELS[state.paperType].toLowerCase()} ${state.level.replace("-", " ")} PDFs found for this subject.`,
         "warn"
       );
     }
@@ -424,8 +435,8 @@ async function onLoadFilesClick() {
 
     let urlsToLoad;
 
-    if (levelKey === "a-level" && state.paperNumber) {
-      // Paper-specific path for all A-Level subjects
+    if ((levelKey === "a-level" || levelKey === "o-level") && state.paperNumber) {
+      // Paper-specific path for levels whose papers are numbered in the manifest or URL paths.
       const subjectData = manifest[levelKey]?.[subjectKey];
       urlsToLoad = getQuestionPaperUrls(subjectData, state.paperNumber);
       if (urlsToLoad.length === 0) {
