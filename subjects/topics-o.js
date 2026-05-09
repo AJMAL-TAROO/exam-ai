@@ -740,3 +740,117 @@ export const TOPICS_O = {
     }
   ]
 };
+
+function topicsFor(subjectKey, topicIds) {
+  const topics = TOPICS_O[subjectKey];
+  if (!Array.isArray(topics)) return [];
+  const idSet = new Set(topicIds);
+  return topics.filter((topic) => idSet.has(topic.id));
+}
+
+function allTopicsFor(subjectKey) {
+  const topics = TOPICS_O[subjectKey];
+  return Array.isArray(topics) ? topics : [];
+}
+
+TOPICS_O.maths.paperTopics = {
+  "paper-1": {
+    label: "Mathematics Paper 1",
+    topics: allTopicsFor("maths")
+  },
+  "paper-2": {
+    label: "Mathematics Paper 2",
+    topics: allTopicsFor("maths")
+  }
+};
+
+TOPICS_O.physics.paperTopics = {
+  "paper-1": {
+    label: "Physics Multiple Choice",
+    topics: allTopicsFor("physics")
+  },
+  "paper-2": {
+    label: "Physics Theory",
+    topics: allTopicsFor("physics")
+  },
+  "paper-3": {
+    label: "Physics Practical Test",
+    topics: topicsFor("physics", [
+      "motion", "thermal", "waves", "electricity", "atomic", "space"
+    ])
+  },
+  "paper-4": {
+    label: "Physics Alternative to Practical",
+    topics: topicsFor("physics", [
+      "motion", "thermal", "waves", "electricity", "atomic", "space"
+    ])
+  }
+};
+
+TOPICS_O.chemistry.paperTopics = {
+  "paper-1": {
+    label: "Chemistry Multiple Choice",
+    topics: allTopicsFor("chemistry")
+  },
+  "paper-2": {
+    label: "Chemistry Theory",
+    topics: allTopicsFor("chemistry")
+  },
+  "paper-3": {
+    label: "Chemistry Practical Test",
+    topics: allTopicsFor("chemistry")
+  },
+  "paper-4": {
+    label: "Chemistry Alternative to Practical",
+    topics: allTopicsFor("chemistry")
+  }
+};
+
+TOPICS_O["computer-science"].paperTopics = {
+  "paper-1": {
+    label: "Computer Science Theory",
+    topics: topicsFor("computer-science", [
+      "data-representation", "data-transmission", "hardware", "internet",
+      "logic", "databases", "security", "ethics"
+    ])
+  },
+  "paper-2": {
+    label: "Computer Science Problem-Solving and Programming",
+    topics: topicsFor("computer-science", [
+      "programming", "logic", "databases", "data-representation"
+    ])
+  }
+};
+
+TOPICS_O.accounts.paperTopics = {
+  "paper-1": {
+    label: "Accounting Multiple Choice",
+    topics: allTopicsFor("accounts")
+  },
+  "paper-2": {
+    label: "Accounting Structured Questions",
+    topics: allTopicsFor("accounts")
+  }
+};
+
+TOPICS_O.business.paperTopics = {
+  "paper-1": {
+    label: "Business Studies Short Answer and Data Response",
+    topics: allTopicsFor("business")
+  },
+  "paper-2": {
+    label: "Business Studies Case Study",
+    topics: allTopicsFor("business")
+  }
+};
+
+TOPICS_O.economics.paperTopics = {
+  "paper-1": {
+    label: "Economics Multiple Choice",
+    topics: allTopicsFor("economics")
+  },
+  "paper-2": {
+    label: "Economics Structured Questions",
+    topics: allTopicsFor("economics")
+  }
+};

@@ -40,6 +40,49 @@ function hasTopics(subjectTopics) {
   return Object.values(subjectTopics).some(hasTopics);
 }
 
+function getPaperNumberFromUrl(url) {
+  const pathMatch = url.match(/\/paper-(\d+)\//i);
+  if (pathMatch) return parseInt(pathMatch[1], 10);
+  const codeMatch = url.match(/_qp_(\d)\d/i);
+  return codeMatch ? parseInt(codeMatch[1], 10) : null;
+}
+
+function getManifestPaperNumbers(subjectData) {
+  const questionPapers = subjectData?.["question-papers"] || subjectData;
+  if (Array.isArray(questionPapers)) {
+    return [...new Set(questionPapers
+      .map(getPaperNumberFromUrl)
+      .filter((num) => Number.isInteger(num)))]
+      .sort((a, b) => a - b);
+  }
+  if (!questionPapers || typeof questionPapers !== "object") return [];
+  return Object.keys(questionPapers)
+    .map((key) => {
+      const match = key.match(/^paper-(\d+)$/);
+      return match ? parseInt(match[1], 10) : null;
+    })
+    .filter((num) => Number.isInteger(num))
+    .sort((a, b) => a - b);
+}
+
+function assertPaperTopicsForLevel(level, topicMap) {
+  for (const [subject, subjectData] of Object.entries(manifest[level] || {})) {
+    const paperNumbers = getManifestPaperNumbers(subjectData);
+    if (paperNumbers.length === 0) continue;
+
+    const subjectTopics = topicMap[subject];
+    assert.ok(subjectTopics?.paperTopics, `${level}/${subject} missing paperTopics`);
+
+    for (const paperNumber of paperNumbers) {
+      const paperKey = `paper-${paperNumber}`;
+      const paperTopics = subjectTopics.paperTopics[paperKey];
+      assert.ok(paperTopics, `${level}/${subject} missing ${paperKey}`);
+      assert.ok(typeof paperTopics.label === "string" && paperTopics.label.length > 0, `${level}/${subject}/${paperKey} missing label`);
+      assert.ok(Array.isArray(paperTopics.topics) && paperTopics.topics.length > 0, `${level}/${subject}/${paperKey} has no topics`);
+    }
+  }
+}
+
 console.log("\nTopic coverage by level");
 
 for (const [level, topicMap] of Object.entries(topicMaps)) {
@@ -53,6 +96,14 @@ for (const [level, topicMap] of Object.entries(topicMaps)) {
     }
   });
 }
+
+test("o-level papers have paper-specific topic groups", () => {
+  assertPaperTopicsForLevel("o-level", TOPICS_O);
+});
+
+test("a-level papers have paper-specific topic groups", () => {
+  assertPaperTopicsForLevel("a-level", TOPICS_A);
+});
 
 test("English is not exposed in manifest or topic maps", () => {
   for (const [level, subjects] of Object.entries(manifest)) {

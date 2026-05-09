@@ -1609,6 +1609,9 @@ TOPICS_A.maths = {
   }
 };
 
+const MATHS_PAPER_TOPICS = { ...TOPICS_A.maths };
+TOPICS_A.maths.paperTopics = MATHS_PAPER_TOPICS;
+
 function topicsFor(subjectKey, topicIds) {
   const topics = TOPICS_A[subjectKey];
   if (!Array.isArray(topics)) return [];
