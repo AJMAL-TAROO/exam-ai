@@ -7,6 +7,8 @@
 
 import {
   buildIndex,
+  buildMcqIndex,
+  generateMcqPaper,
   generatePaper,
   loadPdf,
 } from "./core.js";
@@ -20,6 +22,7 @@ import { buildPaperPath } from "./pathUtils.js";
 const state = {
   level: null,          // 'o-level' | 'a-level' | 'nce'
   subject: null,        // subject key from manifest / topics map
+  paperType: null,      // 'written' | 'mcq'
   paperNumber: null,    // numeric paper number for A-Level subjects
   allUrls: [],          // all URLs from manifest for chosen level/paper
   matchedUrls: [],      // URLs loaded from the manifest for the selected paper
@@ -43,6 +46,18 @@ const SUBJECT_LABELS = {
   business: "Business",
   "computer-science": "Computer Science",
 };
+
+const PAPER_TYPE_LABELS = {
+  written: "Question-based",
+  mcq: "Multiple choice",
+};
+
+const PAPER_1_MCQ_SUBJECTS = new Set([
+  "accounts",
+  "chemistry",
+  "economics",
+  "physics",
+]);
 
 // ─── DOM refs ─────────────────────────────────────────────────────────────────
 
@@ -115,6 +130,20 @@ function getTopicGroupLabel() {
   return paperLabel ? `${paperLabel} topics` : "Topics";
 }
 
+function resetDownstreamFromPaperType() {
+  state.paperNumber = null;
+  state.matchedUrls = [];
+  state.selectedPdfUrls = [];
+  state.questionIndex = [];
+  $("paper-number-options").innerHTML = "";
+  hideSection("paper-select-section");
+  hideSection("scan-section");
+  hideSection("index-section");
+  hideSection("generate-section");
+  hideSection("paper-section");
+  resetPdfSelectorAndReport();
+}
+
 function formatSubjectLabel(subjectKey) {
   return SUBJECT_LABELS[subjectKey] ||
     subjectKey.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -153,6 +182,44 @@ function getQuestionPaperUrls(subjectData, paperNumber = null) {
   }
 
   return [];
+}
+
+function getPaperNumberFromUrl(url) {
+  const pathMatch = url.match(/\/paper-(\d+)\//i);
+  if (pathMatch) return parseInt(pathMatch[1], 10);
+
+  const codeMatch = url.match(/_qp_(\d)\d/i);
+  return codeMatch ? parseInt(codeMatch[1], 10) : null;
+}
+
+function classifyPdfUrl(url, level, subject) {
+  const normalised = url.toLowerCase();
+  if (level === "nce") {
+    if (/(?:^|[-_/])section-a(?:[-_.\\/]|$)/i.test(normalised)) return "mcq";
+    if (/(?:^|[-_/])section-b(?:[-_.\\/]|$)/i.test(normalised)) return "written";
+    return "mixed";
+  }
+
+  const paperNumber = getPaperNumberFromUrl(url);
+  if (paperNumber === 1 && PAPER_1_MCQ_SUBJECTS.has(subject)) return "mcq";
+  return "written";
+}
+
+function isUrlCompatibleWithPaperType(url, paperType, level, subject) {
+  const kind = classifyPdfUrl(url, level, subject);
+  return kind === paperType || kind === "mixed";
+}
+
+function filterUrlsByPaperType(urls, paperType, level, subject) {
+  if (!paperType) return urls;
+  return urls.filter((url) => isUrlCompatibleWithPaperType(url, paperType, level, subject));
+}
+
+function getCompatiblePaperNumbers(subjectData, paperType, level, subject) {
+  return getSortedPaperNumbers(subjectData).filter((paperNumber) => {
+    const urls = getQuestionPaperUrls(subjectData, paperNumber);
+    return filterUrlsByPaperType(urls, paperType, level, subject).length > 0;
+  });
 }
 
 function populateSubjectOptions(levelKey, manifest) {
@@ -204,6 +271,7 @@ async function loadManifest() {
 async function onLevelChange(e) {
   state.level = e.target.value || null;
   state.subject = null;
+  state.paperType = null;
   state.paperNumber = null;
   state.matchedUrls = [];
   state.selectedPdfUrls = [];
@@ -214,8 +282,12 @@ async function onLevelChange(e) {
   subjectSelect.innerHTML = '<option value="">— choose subject —</option>';
 
   $("paper-number-options").innerHTML = "";
+  document.querySelectorAll('input[name="paper-type"]').forEach((radio) => {
+    radio.checked = false;
+  });
 
   // Hide downstream sections
+  hideSection("paper-type-section");
   hideSection("paper-select-section");
   hideSection("scan-section");
   hideSection("index-section");
@@ -236,13 +308,19 @@ async function onLevelChange(e) {
 
 async function onSubjectChange(e) {
   state.subject = e.target.value || null;
+  state.paperType = null;
   state.paperNumber = null;
   state.matchedUrls = [];
   state.selectedPdfUrls = [];
   state.questionIndex = [];
 
   $("paper-number-options").innerHTML = "";
+  document.querySelectorAll('input[name="paper-type"]').forEach((radio) => {
+    radio.checked = false;
+  });
 
+  hideSection("paper-type-section");
+  hideSection("paper-select-section");
   hideSection("scan-section");
   hideSection("index-section");
   hideSection("generate-section");
@@ -252,38 +330,52 @@ async function onSubjectChange(e) {
   resetPdfSelectorAndReport();
 
   if (state.subject && state.level) {
-    if (state.level === "a-level") {
-      const manifest = await loadManifest();
-      const paperNumbers = getSortedPaperNumbers(manifest?.[state.level]?.[state.subject]);
-
-      renderPaperOptions(paperNumbers);
-      showSection("paper-select-section");
-      if (paperNumbers.length > 0) {
-        setStatus("paper-select", "");
-        const firstPaper = paperNumbers[0];
-        const firstRadio = document.querySelector(`input[name="paper-number"][value="${firstPaper}"]`);
-        if (firstRadio) {
-          firstRadio.checked = true;
-        }
-        state.paperNumber = firstPaper;
-        showSection("scan-section");
-        setStatus("scan", "");
-      } else {
-        state.paperNumber = null;
-        hideSection("scan-section");
-        setStatus("paper-select", "No paper folders found in the manifest for this subject.", "warn");
-      }
-    } else {
-      hideSection("paper-select-section");
-      showSection("scan-section");
-      setStatus("scan", "");
-    }
+    showSection("paper-type-section");
+    setStatus("paper-type", "");
   } else {
+    hideSection("paper-type-section");
     hideSection("paper-select-section");
   }
 }
 
 // ─── Step 3 (CS A-Level only): Paper selection ────────────────────────────────
+
+async function onPaperTypeChange(e) {
+  state.paperType = e.target.value || null;
+  resetDownstreamFromPaperType();
+
+  if (!state.paperType || !state.level || !state.subject) return;
+
+  if (state.level === "a-level") {
+    const manifest = await loadManifest();
+    const subjectData = manifest?.[state.level]?.[state.subject];
+    const paperNumbers = getCompatiblePaperNumbers(subjectData, state.paperType, state.level, state.subject);
+
+    renderPaperOptions(paperNumbers);
+    showSection("paper-select-section");
+    if (paperNumbers.length > 0) {
+      setStatus("paper-select", "");
+      const firstPaper = paperNumbers[0];
+      const firstRadio = document.querySelector(`input[name="paper-number"][value="${firstPaper}"]`);
+      if (firstRadio) firstRadio.checked = true;
+      state.paperNumber = firstPaper;
+      showSection("scan-section");
+      setStatus("scan", "");
+    } else {
+      state.paperNumber = null;
+      hideSection("scan-section");
+      setStatus(
+        "paper-select",
+        `No ${PAPER_TYPE_LABELS[state.paperType].toLowerCase()} A-Level PDFs found for this subject.`,
+        "warn"
+      );
+    }
+  } else {
+    hideSection("paper-select-section");
+    showSection("scan-section");
+    setStatus("scan", "");
+  }
+}
 
 function onPaperChange(e) {
   state.paperNumber = parseInt(e.target.value, 10) || null;
@@ -322,6 +414,13 @@ async function onLoadFilesClick() {
     const manifest = await loadManifest();
     const levelKey = state.level;
     const subjectKey = state.subject;
+    const paperType = state.paperType;
+
+    if (!paperType) {
+      setStatus("scan", "Please choose a paper type first.", "warn");
+      setLoading("scan-btn", false);
+      return;
+    }
 
     let urlsToLoad;
 
@@ -349,6 +448,18 @@ async function onLoadFilesClick() {
         setLoading("scan-btn", false);
         return;
       }
+    }
+
+    urlsToLoad = filterUrlsByPaperType(urlsToLoad, paperType, levelKey, subjectKey);
+    if (urlsToLoad.length === 0) {
+      const paperLabel = state.paperNumber ? ` Paper ${state.paperNumber}` : "";
+      setStatus(
+        "scan",
+        `No ${PAPER_TYPE_LABELS[paperType].toLowerCase()} PDFs found for ${subjectKey}${paperLabel} (${levelKey}).`,
+        "warn"
+      );
+      setLoading("scan-btn", false);
+      return;
     }
 
     state.allUrls = urlsToLoad;
@@ -415,7 +526,8 @@ async function onBuildIndexClick() {
   state.questionIndex = [];
 
   try {
-    state.questionIndex = await buildIndex(
+    const buildFn = state.paperType === "mcq" ? buildMcqIndex : buildIndex;
+    state.questionIndex = await buildFn(
       state.selectedPdfUrls,
       state.topics,
       (done, total, url) => {
@@ -425,7 +537,7 @@ async function onBuildIndexClick() {
     );
 
     if (state.questionIndex.length === 0) {
-      setStatus("index", "No questions found. PDFs may not be text-based or question format differs.", "warn");
+      setStatus("index", "No questions found. PDFs may not be text-based or the selected paper type may not match the source format.", "warn");
     } else {
       setStatus(
         "index",
@@ -699,7 +811,8 @@ function onGenerateClick() {
     }
   }
 
-  const paper = generatePaper(state.questionIndex, {
+  const generateFn = state.paperType === "mcq" ? generateMcqPaper : generatePaper;
+  const paper = generateFn(state.questionIndex, {
     topics: selectedTopics,
     count,
     seed,
@@ -720,6 +833,7 @@ function onGenerateClick() {
       meta: {
         level: state.level,
         subject: state.subject,
+        paperType: state.paperType,
         ...(state.paperNumber !== null && { paper: state.paperNumber }),
         count: paper.length,
         seed: seed,
@@ -731,6 +845,10 @@ function onGenerateClick() {
         originalNumber: q.number,
         pageRange: { startPage: q.startPage ?? 1, endPage: q.endPage ?? q.startPage ?? 1 },
         topics: q.topics,
+        ...(state.paperType === "mcq" && {
+          stem: q.stem,
+          options: q.options,
+        }),
         text: q.text,
       })),
     },
@@ -742,6 +860,11 @@ function onGenerateClick() {
 // ─── Step 7: Render paper ─────────────────────────────────────────────────────
 
 function renderPaper(paper, seed) {
+  if (state.paperType === "mcq") {
+    renderMcqPaper(paper, seed);
+    return;
+  }
+
   const container = $("paper-container");
   container.innerHTML = "";
 
@@ -910,6 +1033,75 @@ function renderPaper(paper, seed) {
   });
 }
 
+function renderMcqPaper(paper, seed) {
+  const container = $("paper-container");
+  container.innerHTML = "";
+
+  const header = document.createElement("div");
+  header.className = "paper-header";
+  header.innerHTML = `
+    <h2>Generated Multiple Choice Paper</h2>
+    <p class="paper-meta">
+      ${state.level?.replace("-", " ").toUpperCase()} &mdash;
+      ${formatSubjectLabel(state.subject)}
+      ${state.paperNumber !== null ? ` &mdash; Paper ${state.paperNumber}` : ""} &mdash;
+      ${paper.length} Questions
+      ${seed !== null ? `&mdash; Seed: <code>${seed}</code>` : ""}
+    </p>
+  `;
+  container.appendChild(header);
+
+  const tableWrap = document.createElement("div");
+  tableWrap.className = "mcq-table-wrap";
+
+  const table = document.createElement("table");
+  table.className = "mcq-table";
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Question</th>
+        <th>Answers</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `;
+  const tbody = table.querySelector("tbody");
+
+  paper.forEach((q, i) => {
+    const topicBadges = q.topics
+      .map((t) => `<span class="topic-badge">${escapeHtml(t)}</span>`)
+      .join(" ");
+    const sourceName = q.pdfUrl.split("/").pop();
+    const pageLabel = `p. ${q.page ?? q.startPage ?? 1}`;
+    const options = q.options || {};
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="mcq-question-cell">
+        <p class="mcq-question-title">Question ${i + 1}</p>
+        <p class="mcq-stem">${escapeHtml(q.stem || "")}</p>
+        <div class="mcq-meta">
+          ${topicBadges}
+          <span title="${escapeHtml(q.pdfUrl)}">${escapeHtml(sourceName)} &mdash; ${pageLabel}</span>
+          <span>Original #${q.number}</span>
+        </div>
+      </td>
+      <td>
+        <ul class="mcq-answer-list">
+          <li><strong>A.</strong> ${escapeHtml(options.A || "")}</li>
+          <li><strong>B.</strong> ${escapeHtml(options.B || "")}</li>
+          <li><strong>C.</strong> ${escapeHtml(options.C || "")}</li>
+          <li><strong>D.</strong> ${escapeHtml(options.D || "")}</li>
+        </ul>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tableWrap.appendChild(table);
+  container.appendChild(tableWrap);
+}
+
 function escapeHtml(str) {
   return str
     .replace(/&/g, "&amp;")
@@ -1049,6 +1241,10 @@ function init() {
   // Scan
   $("scan-btn").addEventListener("click", onLoadFilesClick);
 
+  document.querySelectorAll('input[name="paper-type"]').forEach((radio) => {
+    radio.addEventListener("change", onPaperTypeChange);
+  });
+
   // PDF selector — Select all / Deselect all
   $("pdf-select-all").addEventListener("click", () => {
     document.querySelectorAll(".pdf-cb").forEach((cb) => { cb.checked = true; });
@@ -1074,6 +1270,7 @@ function init() {
   // Hide all downstream sections at start
   [
     "subject-section",
+    "paper-type-section",
     "paper-select-section",
     "scan-section",
     "index-section",

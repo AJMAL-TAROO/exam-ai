@@ -325,6 +325,72 @@
       line-height: 1.7;
     }
 
+    .mcq-table-wrap {
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    .mcq-table {
+      width: 100%;
+      min-width: 640px;
+      border-collapse: collapse;
+      margin-top: 1rem;
+      font-size: 0.9rem;
+    }
+
+    .mcq-table th,
+    .mcq-table td {
+      border: 1px solid var(--color-border);
+      padding: 0.75rem;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    .mcq-table th {
+      background: var(--color-bg);
+      color: var(--color-muted);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .mcq-question-cell {
+      width: 58%;
+      line-height: 1.55;
+    }
+
+    .mcq-question-title {
+      margin: 0 0 0.45rem;
+      font-weight: 700;
+      color: var(--color-primary);
+    }
+
+    .mcq-stem {
+      margin: 0 0 0.6rem;
+      line-height: 1.55;
+    }
+
+    .mcq-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 0.5rem;
+      align-items: center;
+      font-size: 0.75rem;
+      color: var(--color-muted);
+    }
+
+    .mcq-answer-list {
+      margin: 0;
+      padding-left: 1.2rem;
+      display: grid;
+      gap: 0.4rem;
+      line-height: 1.5;
+    }
+
+    .mcq-answer-list li {
+      padding-left: 0.15rem;
+    }
+
     /* ── PDF page image section ───────────────────────────── */
     .question-pages-section {
       padding: 0.75rem 0.85rem;
@@ -692,6 +758,21 @@
   </section>
 
   <!-- ── Step 3: Paper (A-Level only) ─────────────────────── -->
+  <section class="card" id="paper-type-section" hidden>
+    <h2><span class="step-badge">3</span> Select Paper Type</h2>
+    <div class="radio-group">
+      <label>
+        <input type="radio" name="paper-type" value="written" />
+        Question-based paper
+      </label>
+      <label>
+        <input type="radio" name="paper-type" value="mcq" />
+        Multiple choice paper
+      </label>
+    </div>
+    <div id="paper-type-status" class="status status--info" hidden></div>
+  </section>
+
   <section class="card" id="paper-select-section" hidden>
     <h2><span class="step-badge">3</span> Select Paper</h2>
     <p style="margin:0 0 0.75rem; font-size:0.875rem; color:var(--color-muted);">
