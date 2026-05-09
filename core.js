@@ -788,6 +788,313 @@ export function splitIntoQuestions(pageTexts, outMeta = null) {
   return questions;
 }
 
+// Section-aware extraction helpers
+
+const SECTION_A_RE = /^[\x01\x02\x03]*\s*section\s+a\b/i;
+const SECTION_B_RE = /^[\x01\x02\x03]*\s*section\s+b\b/i;
+const WRITTEN_QUESTION_2_RE = /^[\x01\x02\x03]*\s*Question\s+2\b/i;
+
+function pageHasSection(pageText, sectionRe) {
+  return pageText.split("\n").some((line) => sectionRe.test(line));
+}
+
+function findFirstSectionPage(pageTexts, sectionRe) {
+  for (let i = 0; i < pageTexts.length; i++) {
+    if (pageHasSection(pageTexts[i], sectionRe)) return i;
+  }
+  return -1;
+}
+
+function findFirstPageAfter(pageTexts, startPage, lineRe) {
+  for (let i = Math.max(0, startPage + 1); i < pageTexts.length; i++) {
+    if (pageTexts[i].split("\n").some((line) => lineRe.test(line))) return i;
+  }
+  return -1;
+}
+
+function slicePageFromSection(pageText, sectionRe) {
+  const lines = pageText.split("\n");
+  const idx = lines.findIndex((line) => sectionRe.test(line));
+  return idx >= 0 ? lines.slice(idx).join("\n") : pageText;
+}
+
+function slicePageBeforeSection(pageText, sectionRe) {
+  const lines = pageText.split("\n");
+  const idx = lines.findIndex((line) => sectionRe.test(line));
+  return idx >= 0 ? lines.slice(0, idx).join("\n") : pageText;
+}
+
+/**
+ * Return only the written-question region from page text.  For combined NCE
+ * papers this means Section B onward; papers without Section B are unchanged.
+ *
+ * @param {string[]} pageTexts
+ * @returns {string[]}
+ */
+export function getWrittenQuestionPages(pageTexts) {
+  const sectionBPage = findFirstSectionPage(pageTexts, SECTION_B_RE);
+  if (sectionBPage < 0) return pageTexts;
+
+  return pageTexts.slice(sectionBPage).map((pageText, idx) => (
+    idx === 0 ? slicePageFromSection(pageText, SECTION_B_RE) : pageText
+  ));
+}
+
+/**
+ * Return only the multiple-choice region from page text.  For combined papers
+ * this means Section A up to, but not including, Section B.  Papers without
+ * section markers are returned unchanged so pure MCQ papers still index.
+ *
+ * @param {string[]} pageTexts
+ * @returns {string[]}
+ */
+export function getMcqQuestionPages(pageTexts) {
+  const sectionAPage = findFirstSectionPage(pageTexts, SECTION_A_RE);
+  const sectionBPage = findFirstSectionPage(pageTexts, SECTION_B_RE);
+  const question2Page = sectionAPage >= 0
+    ? findFirstPageAfter(pageTexts, sectionAPage, WRITTEN_QUESTION_2_RE)
+    : -1;
+
+  if (sectionAPage < 0 && sectionBPage < 0) return pageTexts;
+
+  const start = sectionAPage >= 0 ? sectionAPage : 0;
+  let endExclusive = pageTexts.length;
+  if (sectionBPage >= 0) endExclusive = sectionBPage + 1;
+  else if (question2Page >= 0) endExclusive = question2Page;
+
+  const sliced = pageTexts.slice(start, endExclusive).map((pageText, idx) => {
+    let next = pageText;
+    if (idx === 0 && sectionAPage >= 0) next = slicePageFromSection(next, SECTION_A_RE);
+    if (start + idx === sectionBPage) next = slicePageBeforeSection(next, SECTION_B_RE);
+    return next;
+  });
+
+  return sliced.filter((pageText) => pageText.replace(/[\x01\x02\x03]/g, "").trim().length > 0);
+}
+
+const MCQ_START_RE =
+  /^\x01?[\x02\x03]*(?:Question\s+|Q\.?\s*)?([1-9]\d?)(?:\s*\.?\s*$|(?:\.\s+|\s+)(?!\s*\d))/i;
+
+const NCE_MCQ_SUBPART_RE = /^[\x01\x02\x03]*\s*\(([a-z])\)\s+/i;
+
+const OPTION_FRAGMENT_RE = /(?:^|\s{2,})([A-D])(?:[.)])?\s+(.+?)(?=\s{2,}[A-D](?:[.)])?\s+|$)/g;
+
+const MCQ_BLOCK_STOP_PATTERNS = [
+  /^\s*(?:©\s*)?MES\b/i,
+  /^\s*please\s+turn\s+over(?:\s+this\s+page)?\b/i,
+  /^\s*marks\s*$/i,
+  /^\s*Question\s+2\b/i,
+];
+
+function isMcqBlockStopLine(line) {
+  const cleaned = stripPrefixes(line).trim();
+  if (STANDALONE_NUMBER_RE.test(cleaned)) return true;
+  return MCQ_BLOCK_STOP_PATTERNS.some((re) => re.test(cleaned));
+}
+
+function extractOptionFragments(line) {
+  const fragments = [];
+  const plain = stripPrefixes(line).trim();
+  let match;
+  while ((match = OPTION_FRAGMENT_RE.exec(plain)) !== null) {
+    fragments.push({ letter: match[1], text: match[2].trim() });
+  }
+  return fragments;
+}
+
+function buildMcqText(stem, options) {
+  return [
+    stem,
+    `A ${options.A}`,
+    `B ${options.B}`,
+    `C ${options.C}`,
+    `D ${options.D}`,
+  ].join("\n");
+}
+
+function cleanMcqStemLine(line, isFirstStemLine = false) {
+  let cleaned = line.trim();
+  if (isFirstStemLine) {
+    cleaned = cleaned.replace(/^(?:Question\s+|Q\.?\s*)?[1-9]\d?\s*\.?\s*/i, "").trim();
+  }
+  cleaned = cleaned.replace(/^\([a-zA-Z]{1,3}\)\s*/, "").trim();
+  return cleaned;
+}
+
+function parseMcqBlock(lines) {
+  const stemLines = [];
+  const options = {};
+  let currentOption = null;
+  let sawStemLine = false;
+
+  for (const rawLine of lines) {
+    let line = stripPrefixes(rawLine).trim();
+    if (!line || !isContentLine(rawLine)) continue;
+    if (isMcqBlockStopLine(line)) break;
+
+    const optionLine = line.match(/^([A-D])(?:[.)])?(?:\s+(.+))?$/);
+    const hasMultipleOptionsOnLine = /\s{2,}[A-D](?:[.)])?\s+/.test(line);
+    if (optionLine && !hasMultipleOptionsOnLine) {
+      currentOption = optionLine[1];
+      const text = optionLine[2]?.trim() ?? "";
+      if (text) {
+        options[currentOption] = options[currentOption]
+          ? `${options[currentOption]} ${text}`.trim()
+          : text;
+      } else if (!options[currentOption]) {
+        options[currentOption] = "";
+      }
+      continue;
+    }
+
+    const fragments = extractOptionFragments(line);
+    if (fragments.length > 0) {
+      for (const fragment of fragments) {
+        currentOption = fragment.letter;
+        options[currentOption] = options[currentOption]
+          ? `${options[currentOption]} ${fragment.text}`.trim()
+          : fragment.text;
+      }
+      continue;
+    }
+
+    if (currentOption && options[currentOption]) {
+      options[currentOption] = `${options[currentOption]} ${line}`.trim();
+    } else {
+      line = cleanMcqStemLine(line, !sawStemLine);
+      sawStemLine = true;
+      if (line) stemLines.push(line);
+    }
+  }
+
+  const stem = stemLines.join(" ").replace(/\s+/g, " ").trim();
+  const hasAllOptions = ["A", "B", "C", "D"].every((letter) => options[letter]?.trim());
+  if (!stem || !hasAllOptions) return null;
+
+  return {
+    stem,
+    options: {
+      A: options.A.trim(),
+      B: options.B.trim(),
+      C: options.C.trim(),
+      D: options.D.trim(),
+    },
+    text: buildMcqText(stem, options),
+  };
+}
+
+function splitIntoNceMcqQuestions(pageTexts, outMeta = null) {
+  const lines = [];
+  const linePageMap = [];
+  let candidatesConsidered = 0;
+
+  for (let p = 0; p < pageTexts.length; p++) {
+    const rawLines = pageTexts[p].split("\n");
+    for (const line of rawLines) {
+      if (!isContentLine(line)) continue;
+      lines.push(line);
+      linePageMap.push(p + 1);
+    }
+  }
+
+  const starts = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(NCE_MCQ_SUBPART_RE);
+    if (!m) continue;
+    starts.push({ index: i, label: m[1].toLowerCase(), number: starts.length + 1 });
+    candidatesConsidered++;
+  }
+
+  const items = [];
+  for (let i = 0; i < starts.length; i++) {
+    const start = starts[i].index;
+    const end = i + 1 < starts.length ? starts[i + 1].index : lines.length;
+    const parsed = parseMcqBlock(lines.slice(start, end));
+    if (!parsed) continue;
+    items.push({
+      number: starts[i].number,
+      label: starts[i].label,
+      stem: parsed.stem,
+      options: parsed.options,
+      text: parsed.text,
+      page: linePageMap[start] ?? 1,
+    });
+  }
+
+  if (outMeta) {
+    const coverage = assessTextCoverage(pageTexts);
+    outMeta.extractionMode = "nce-section-a";
+    outMeta.candidateHeadersFound = candidatesConsidered;
+    outMeta.lowTextCoverage = coverage.isLowCoverage;
+    outMeta.avgCharsPerPage = coverage.avgCharsPerPage;
+  }
+
+  return items;
+}
+
+/**
+ * Split page text into individual multiple-choice question items.
+ *
+ * @param {string[]} pageTexts
+ * @param {Object} [outMeta]
+ * @param {{ mode?: 'numbered'|'nce-section-a' }} [opts]
+ * @returns {{ number: number, stem: string, options: object, text: string, page: number }[]}
+ */
+export function splitIntoMcqQuestions(pageTexts, outMeta = null, opts = {}) {
+  if (opts.mode === "nce-section-a") {
+    return splitIntoNceMcqQuestions(pageTexts, outMeta);
+  }
+
+  const lines = [];
+  const linePageMap = [];
+  let candidatesConsidered = 0;
+
+  for (let p = 0; p < pageTexts.length; p++) {
+    const rawLines = pageTexts[p].split("\n");
+    for (const line of rawLines) {
+      if (!isContentLine(line)) continue;
+      lines.push(line);
+      linePageMap.push(p + 1);
+    }
+  }
+
+  const starts = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(MCQ_START_RE);
+    if (!m) continue;
+    if (isQuestionFalsePositive(lines[i])) continue;
+    const num = parseInt(m[1], 10);
+    if (num < 1 || num > 80) continue;
+    starts.push({ index: i, number: num });
+    candidatesConsidered++;
+  }
+
+  const items = [];
+  for (let i = 0; i < starts.length; i++) {
+    const start = starts[i].index;
+    const end = i + 1 < starts.length ? starts[i + 1].index : lines.length;
+    const parsed = parseMcqBlock(lines.slice(start, end));
+    if (!parsed) continue;
+    items.push({
+      number: starts[i].number,
+      stem: parsed.stem,
+      options: parsed.options,
+      text: parsed.text,
+      page: linePageMap[start] ?? 1,
+    });
+  }
+
+  if (outMeta) {
+    const coverage = assessTextCoverage(pageTexts);
+    outMeta.extractionMode = "mcq";
+    outMeta.candidateHeadersFound = candidatesConsidered;
+    outMeta.lowTextCoverage = coverage.isLowCoverage;
+    outMeta.avgCharsPerPage = coverage.avgCharsPerPage;
+  }
+
+  return items;
+}
+
 // ─── Topic tagging ────────────────────────────────────────────────────────────
 
 /**
@@ -1073,9 +1380,10 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
     try {
       const pdfDoc = await loadPdf(url);
       const rawPages = await extractAllPagesText(pdfDoc);
+      const writtenPages = getWrittenQuestionPages(rawPages);
       // Capture extraction metadata (mode, candidate count, coverage) for debugInfo.
       const extractionMeta = {};
-      const questions = splitIntoQuestions(rawPages, extractionMeta);
+      const questions = splitIntoQuestions(writtenPages, extractionMeta);
       for (const q of questions) {
         const key = `${url}||${q.number}`;
         if (seenKeys.has(key)) continue;
@@ -1104,6 +1412,70 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
       console.warn(`Failed to process ${url}:`, err);
     }
   }
+  if (onProgress) onProgress(uniqueUrls.length, uniqueUrls.length, "");
+  return index;
+}
+
+/**
+ * Build a multiple-choice question index from a list of PDF URLs.
+ *
+ * @param {string[]} pdfUrls
+ * @param {{ id: string, label: string, keywords: string[] }[]} topics
+ * @param {(done: number, total: number, url: string) => void} [onProgress]
+ * @returns {Promise<QuestionEntry[]>}
+ */
+export async function buildMcqIndex(pdfUrls, topics, onProgress) {
+  const index = [];
+  const uniqueUrls = [...new Set(pdfUrls)];
+  const seenKeys = new Set();
+
+  for (let i = 0; i < uniqueUrls.length; i++) {
+    const url = uniqueUrls[i];
+    if (onProgress) onProgress(i, uniqueUrls.length, url);
+    try {
+      const pdfDoc = await loadPdf(url);
+      const rawPages = await extractAllPagesText(pdfDoc);
+      const mcqPages = getMcqQuestionPages(rawPages);
+      const extractionMeta = {};
+      const isNcePaper = /(?:^|\/)assets\/nce\//i.test(url.replace(/\\/g, "/"));
+      const questions = splitIntoMcqQuestions(
+        mcqPages,
+        extractionMeta,
+        { mode: isNcePaper ? "nce-section-a" : "numbered" }
+      );
+
+      for (const q of questions) {
+        const key = `${url}||${q.number}`;
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
+        const debugResult = tagTopicsDebug(q.text, topics);
+        index.push({
+          pdfUrl: url,
+          number: q.number,
+          stem: q.stem,
+          options: q.options,
+          text: q.text,
+          topics: tagTopics(q.text, topics),
+          startPage: q.page,
+          endPage: q.page,
+          page: q.page,
+          blankPages: [],
+          debugInfo: {
+            matchedLine: q.stem,
+            topicScores: debugResult.topicScores,
+            subParts: [],
+            extractionMode: extractionMeta.extractionMode ?? "mcq",
+            candidateHeadersFound: extractionMeta.candidateHeadersFound ?? 0,
+            lowTextCoverage: extractionMeta.lowTextCoverage ?? false,
+            avgCharsPerPage: extractionMeta.avgCharsPerPage ?? 0,
+          },
+        });
+      }
+    } catch (err) {
+      console.warn(`Failed to process ${url}:`, err);
+    }
+  }
+
   if (onProgress) onProgress(uniqueUrls.length, uniqueUrls.length, "");
   return index;
 }
@@ -1177,4 +1549,19 @@ export function generatePaper(index, { topics = null, count = 10, seed = null })
   const effectiveSeed = seed !== null ? (seed >>> 0) : (Math.random() * 0x100000000) >>> 0;
   const shuffled = seededShuffle(pool, effectiveSeed);
   return shuffled.slice(0, Math.min(count, shuffled.length));
+}
+
+/**
+ * Generate a randomized multiple-choice paper.
+ *
+ * @param {QuestionEntry[]} index
+ * @param {Object} opts
+ * @param {string[]|null} opts.topics
+ * @param {number} opts.count
+ * @param {number|null} opts.seed
+ * @returns {QuestionEntry[]}
+ */
+export function generateMcqPaper(index, { topics = null, count = 10, seed = null }) {
+  const mcqIndex = index.filter((q) => q.options && q.stem);
+  return generatePaper(mcqIndex, { topics, count, seed });
 }
