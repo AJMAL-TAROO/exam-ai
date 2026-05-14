@@ -7,6 +7,7 @@
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { tagTopics } from "../core.js";
 import { TOPICS_NCE } from "../subjects/topics-nce.js";
 
 let passed = 0;
@@ -58,6 +59,23 @@ test("NCE topic ids are unique per subject", () => {
     const ids = topics.map((topic) => topic.id);
     assert.equal(new Set(ids).size, ids.length, `${subject} has duplicate topic ids`);
   }
+});
+
+console.log("\nNCE maths topic classification");
+
+test("instructional circle with odd numbers classifies as Number", () => {
+  const [topic] = tagTopics("Circle all the odd numbers.", TOPICS_NCE.maths);
+  assert.equal(topic, "number");
+});
+
+test("instructional circle does not classify as Geometry & Measures", () => {
+  const [topic] = tagTopics("Circle the even numbers in the list below.", TOPICS_NCE.maths);
+  assert.notEqual(topic, "geometry-and-measure");
+});
+
+test("real circle geometry still classifies as Geometry & Measures", () => {
+  const [topic] = tagTopics("Find the circumference of a circle with radius 7 cm.", TOPICS_NCE.maths);
+  assert.equal(topic, "geometry-and-measure");
 });
 
 console.log("\nNCE manifest structure");
