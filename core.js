@@ -1129,6 +1129,32 @@ function extractSubParts(questionText) {
 }
 
 /**
+ * Detect a written-index false positive where a whole multiple-choice section
+ * has been captured as one "question" because the PDF labels it with a main
+ * question number. These blocks belong in MCQ generation, not question-based
+ * generation.
+ *
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function isLikelyMcqInstructionBlock(text) {
+  const cleaned = text.replace(/[\x01\x02\x03]/g, " ");
+  const hasMcqInstruction =
+    /\bcircle\s+the\s+correct\s+answer\b/i.test(cleaned) ||
+    /\beach\s+item\s+carr(?:y|ies)\s+(?:1|one)\s+marks?\b/i.test(cleaned);
+
+  if (!hasMcqInstruction) return false;
+
+  const optionLineCount = cleaned
+    .split("\n")
+    .filter((line) => /^\s*[A-D](?:[.)])?\s+\S/i.test(line.trim()))
+    .length;
+  const subPartCount = extractSubParts(cleaned).length;
+
+  return optionLineCount >= 4 || subPartCount >= 2;
+}
+
+/**
  * Normalize hyphens and underscores to spaces so that, for example,
  * "graph-based" and "graph_theory" are treated as "graph based" and
  * "graph theory" when matching.
@@ -1206,6 +1232,20 @@ const SINGLE_WORD_WEIGHT = 1;
 const MAIN_BODY_MULTIPLIER = 2;
 
 /**
+ * Remove command-word uses that otherwise look like subject keywords.
+ *
+ * Example: "Circle all the odd numbers" uses "circle" as an instruction, not
+ * as a geometry object. Real geometry phrasing such as "draw a circle" or
+ * "circumference of a circle" is left untouched.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function normalizeInstructionWordsForScoring(text) {
+  return text.replace(/\bcircle\s+(?=all|the|each|any|your|correct|only|every)\b/gi, "");
+}
+
+/**
  * Score a question against each topic.
  *
  * Keywords found in the *main question body* (the text before the first
@@ -1222,13 +1262,14 @@ const MAIN_BODY_MULTIPLIER = 2;
  * @returns {TopicScore[]}
  */
 function scoreTopics(questionText, topics) {
-  const splitIdx = findFirstSubPartIndex(questionText);
-  const mainText     = (splitIdx >= 0 ? questionText.slice(0, splitIdx) : questionText).toLowerCase();
-  const subText      = (splitIdx >= 0 ? questionText.slice(splitIdx)    : "").toLowerCase();
+  const scoringText = normalizeInstructionWordsForScoring(questionText);
+  const splitIdx = findFirstSubPartIndex(scoringText);
+  const mainText     = (splitIdx >= 0 ? scoringText.slice(0, splitIdx) : scoringText).toLowerCase();
+  const subText      = (splitIdx >= 0 ? scoringText.slice(splitIdx)    : "").toLowerCase();
   // Pre-split the original-case text into lines once so findContextLine can
   // iterate without re-splitting on every keyword lookup.
-  const mainLines = (splitIdx >= 0 ? questionText.slice(0, splitIdx) : questionText).split("\n");
-  const subLines  = (splitIdx >= 0 ? questionText.slice(splitIdx)    : "").split("\n");
+  const mainLines = (splitIdx >= 0 ? scoringText.slice(0, splitIdx) : scoringText).split("\n");
+  const subLines  = (splitIdx >= 0 ? scoringText.slice(splitIdx)    : "").split("\n");
 
   return topics.map((topic) => {
     /** @type {MatchedKeyword[]} */
@@ -1264,18 +1305,19 @@ function scoreTopics(questionText, topics) {
  * @returns {Array<import('./topicScorer.js').AugmentedTopicScore>}
  */
 function scoreTopicsHybrid(questionText, topics) {
+  const scoringText = normalizeInstructionWordsForScoring(questionText);
   // Build a lookup so keywords can be re-attached after the scoring pass.
   const keywordsById = Object.fromEntries(topics.map((t) => [t.id, Array.isArray(t.keywords) ? t.keywords : []]));
 
   // scoreTopics() returns objects without the keywords field; merge them back
   // so that augmentWithHybridScores() can compute TF-IDF against each topic's
   // keyword list without throwing on topic.keywords.join().
-  const keywordScored = scoreTopics(questionText, topics).map((scored) => ({
+  const keywordScored = scoreTopics(scoringText, topics).map((scored) => ({
     ...scored,
     keywords: Array.isArray(keywordsById[scored.id]) ? keywordsById[scored.id] : [],
   }));
 
-  return augmentWithHybridScores(questionText, keywordScored)
+  return augmentWithHybridScores(scoringText, keywordScored)
     .sort((a, b) => b.hybridScore - a.hybridScore);
 }
 
@@ -1385,6 +1427,8 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
       const extractionMeta = {};
       const questions = splitIntoQuestions(writtenPages, extractionMeta);
       for (const q of questions) {
+        if (isLikelyMcqInstructionBlock(q.text)) continue;
+
         const key = `${url}||${q.number}`;
         if (seenKeys.has(key)) continue;
         seenKeys.add(key);

@@ -12,6 +12,8 @@ export const TOPICS_NCE = {
       keywords: [
         "integer", "fraction", "decimal", "percentage", "ratio", "proportion",
         "prime", "factor", "multiple", "hcf", "lcm", "square", "cube",
+        "odd number", "odd numbers", "even number", "even numbers",
+        "whole number", "whole numbers", "counting number", "counting numbers",
         "square root", "cube root", "indices", "standard form", "rounding",
         "significant figure", "estimate", "approximation", "upper bound",
         "lower bound", "profit", "loss", "discount", "simple interest",

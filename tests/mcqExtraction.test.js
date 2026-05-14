@@ -9,6 +9,7 @@ import {
   generateMcqPaper,
   getMcqQuestionPages,
   getWrittenQuestionPages,
+  isLikelyMcqInstructionBlock,
   splitIntoMcqQuestions,
   splitIntoQuestions,
 } from "../core.js";
@@ -58,6 +59,34 @@ test("written extraction uses Section B and excludes Section A", () => {
   const questions = splitIntoQuestions(writtenPages);
   assert.equal(questions.length, 2);
   assert.ok(questions[0].text.includes("Define acceleration"));
+});
+
+test("written generation rejects whole MCQ instruction blocks", () => {
+  const text = [
+    "11. Circle the correct answer. Each item carries 1 mark.",
+    "(a) 1.2 x 4 =",
+    "A 0.46",
+    "B 0.48",
+    "C 4.6",
+    "D 4.8",
+    "(b) How many sides does a pentagon have?",
+    "A 5",
+    "B 6",
+    "C 7",
+    "D 8",
+  ].join("\n");
+
+  assert.equal(isLikelyMcqInstructionBlock(text), true);
+});
+
+test("written generation keeps normal geometry questions about circles", () => {
+  const text = [
+    "11. A circle has radius 7 cm.",
+    "(a) Find the circumference of the circle.",
+    "(b) Find the area of the circle.",
+  ].join("\n");
+
+  assert.equal(isLikelyMcqInstructionBlock(text), false);
 });
 
 test("mcq extraction uses Section A and excludes Section B", () => {
