@@ -829,13 +829,18 @@ function slicePageBeforeSection(pageText, sectionRe) {
  * papers this means Section B onward; papers without Section B are unchanged.
  *
  * @param {string[]} pageTexts
+ * @param {{ dropFirstPage?: boolean }} [opts]
  * @returns {string[]}
  */
-export function getWrittenQuestionPages(pageTexts) {
-  const sectionBPage = findFirstSectionPage(pageTexts, SECTION_B_RE);
-  if (sectionBPage < 0) return pageTexts;
+export function getWrittenQuestionPages(pageTexts, opts = {}) {
+  const sourcePages = opts.dropFirstPage && pageTexts.length > 0
+    ? ["", ...pageTexts.slice(1)]
+    : pageTexts;
 
-  return pageTexts.slice(sectionBPage).map((pageText, idx) => (
+  const sectionBPage = findFirstSectionPage(sourcePages, SECTION_B_RE);
+  if (sectionBPage < 0) return sourcePages;
+
+  return sourcePages.slice(sectionBPage).map((pageText, idx) => (
     idx === 0 ? slicePageFromSection(pageText, SECTION_B_RE) : pageText
   ));
 }
@@ -1420,9 +1425,10 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
     const url = uniqueUrls[i];
     if (onProgress) onProgress(i, uniqueUrls.length, url);
     try {
+      const isNcePaper = /(?:^|\/)assets\/nce\//i.test(url.replace(/\\/g, "/"));
       const pdfDoc = await loadPdf(url);
       const rawPages = await extractAllPagesText(pdfDoc);
-      const writtenPages = getWrittenQuestionPages(rawPages);
+      const writtenPages = getWrittenQuestionPages(rawPages, { dropFirstPage: isNcePaper });
       // Capture extraction metadata (mode, candidate count, coverage) for debugInfo.
       const extractionMeta = {};
       const questions = splitIntoQuestions(writtenPages, extractionMeta);
