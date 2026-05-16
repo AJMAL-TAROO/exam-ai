@@ -85,6 +85,87 @@ test("NCE written extraction drops first page before question splitting", () => 
   assert.ok(!questions[0].text.includes("Write your index number"));
 });
 
+test("question splitting records crop metadata between questions on the same page", () => {
+  const pages = [
+    [
+      "\x031 Work out:",
+      "451 + 236",
+      "Answer:",
+      "[1]",
+      "\x032 Evaluate:",
+      "7 / 9 - 5 / 9",
+      "Answer:",
+      "[1]",
+      "\x033 Simplify (a^4)^5",
+      "Answer:",
+      "[1]",
+      "\x034 Calculate 2.3 x 3",
+      "Answer:",
+      "[1]",
+    ].join("\n"),
+  ];
+  const layouts = [[
+    { y: 720 },
+    { y: 690 },
+    { y: 660 },
+    { y: 640 },
+    { y: 610 },
+    { y: 580 },
+    { y: 550 },
+    { y: 530 },
+    { y: 500 },
+    { y: 470 },
+    { y: 450 },
+    { y: 420 },
+    { y: 390 },
+    { y: 370 },
+  ]];
+
+  const questions = splitIntoQuestions(pages, null, {
+    pageLineLayouts: layouts,
+    includeCropMeta: true,
+  });
+
+  assert.equal(questions.length, 4);
+  assert.equal(questions[2].number, 3);
+  assert.equal(questions[2].crop.cropped, true);
+  assert.equal(questions[2].crop.page, 1);
+  assert.equal(questions[2].crop.startY, 500);
+  assert.equal(questions[2].crop.nextStartY, 420);
+});
+
+test("non-NCE written questions can also carry crop metadata", () => {
+  const pages = [
+    [
+      "\x011 Define acceleration.",
+      "Give the SI unit.",
+      "[2]",
+      "\x012 State Newton's second law.",
+      "Use F = ma.",
+      "[2]",
+    ].join("\n"),
+  ];
+  const layouts = [[
+    { y: 720 },
+    { y: 690 },
+    { y: 660 },
+    { y: 600 },
+    { y: 570 },
+    { y: 540 },
+  ]];
+
+  const questions = splitIntoQuestions(pages, null, {
+    pageLineLayouts: layouts,
+    includeCropMeta: true,
+  });
+
+  assert.equal(questions.length, 2);
+  assert.equal(questions[0].crop.cropped, true);
+  assert.equal(questions[0].crop.page, 1);
+  assert.equal(questions[0].crop.startY, 720);
+  assert.equal(questions[0].crop.nextStartY, 600);
+});
+
 test("written generation rejects whole MCQ instruction blocks", () => {
   const text = [
     "11. Circle the correct answer. Each item carries 1 mark.",

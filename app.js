@@ -856,6 +856,7 @@ function onGenerateClick() {
         originalNumber: q.number,
         pageRange: { startPage: q.startPage ?? 1, endPage: q.endPage ?? q.startPage ?? 1 },
         topics: q.topics,
+        ...(q.crop && { crop: q.crop }),
         ...(state.paperType === "mcq" && {
           stem: q.stem,
           options: q.options,
@@ -915,6 +916,14 @@ function renderPaper(paper, seed) {
     const candidateHeadersFound = debug.candidateHeadersFound ?? 0;
     const lowTextCoverage       = debug.lowTextCoverage       ?? false;
     const avgCharsPerPage       = debug.avgCharsPerPage       ?? 0;
+    const cropInfo = q.crop || null;
+    const canRenderCrop = Boolean(cropInfo?.cropped && sp === ep);
+    const outputModeLabel = canRenderCrop
+      ? "Cropped question"
+      : cropInfo?.cropped
+        ? "Full source page (multi-page)"
+        : "Full source page";
+    const outputModeClass = canRenderCrop ? "ai-debug-crop-tag--cropped" : "ai-debug-crop-tag--full";
 
     // The single assigned topic for this question
     const assignedTopicId = q.topics[0] ?? "unclassified";
@@ -1003,6 +1012,18 @@ function renderPaper(paper, seed) {
             <span class="ai-debug-value">${coverageBadge}</span>
           </div>
           <div class="ai-debug-row">
+            <span class="ai-debug-label">Page output</span>
+            <span class="ai-debug-value">
+              <span class="ai-debug-crop-tag ${outputModeClass}">${outputModeLabel}</span>
+              ${
+                canRenderCrop
+                  ? `<button type="button" class="btn-link source-preview-btn" data-pdf-url="${escapeHtml(q.pdfUrl)}" data-page="${sp}">View original page</button>`
+                  : ""
+              }
+            </span>
+          </div>
+          <div class="source-preview-container" hidden></div>
+          <div class="ai-debug-row">
             <span class="ai-debug-label">Sub-parts found</span>
             <span class="ai-debug-value">${subPartsHtml}</span>
           </div>
@@ -1038,7 +1059,22 @@ function renderPaper(paper, seed) {
 
     // Render pages immediately — no toggle needed; canvas is the primary view.
     const pagesContainer = div.querySelector(".question-pages-container");
-    renderPdfPages(pagesContainer, q.pdfUrl, sp, ep, q.blankPages ?? []);
+    if (canRenderCrop) {
+      renderPdfCrop(pagesContainer, q.pdfUrl, cropInfo);
+      const previewButton = div.querySelector(".source-preview-btn");
+      const previewContainer = div.querySelector(".source-preview-container");
+      previewButton?.addEventListener("click", () => {
+        const isHidden = previewContainer.hidden;
+        previewContainer.hidden = !isHidden;
+        previewButton.textContent = isHidden ? "Hide original page" : "View original page";
+        if (isHidden && !previewContainer.dataset.loaded) {
+          previewContainer.dataset.loaded = "true";
+          renderPdfPages(previewContainer, q.pdfUrl, sp, sp, []);
+        }
+      });
+    } else {
+      renderPdfPages(pagesContainer, q.pdfUrl, sp, ep, q.blankPages ?? []);
+    }
 
     container.appendChild(div);
   });
@@ -1221,6 +1257,58 @@ async function renderPdfPages(container, pdfUrl, startPage, endPage, blankPages 
   } catch (err) {
     container.innerHTML =
       `<span class="page-error">Could not render page: ${escapeHtml(err.message)}</span>`;
+  }
+}
+
+async function renderPdfCrop(container, pdfUrl, crop) {
+  const pageNumber = crop.page ?? 1;
+  container.innerHTML = `<span class="page-loading">Loading cropped question…</span>`;
+  try {
+    const pdfDoc = await getCachedPdfDoc(pdfUrl);
+    const page = await pdfDoc.getPage(pageNumber);
+    const scale = 1.5;
+    const viewport = page.getViewport({ scale });
+    const sourceCanvas = document.createElement("canvas");
+    sourceCanvas.width = viewport.width;
+    sourceCanvas.height = viewport.height;
+    const sourceCtx = sourceCanvas.getContext("2d");
+    await page.render({ canvasContext: sourceCtx, viewport }).promise;
+
+    const topPdfY = Math.min(viewport.height / scale, (crop.startY ?? 0) + 28);
+    const bottomPdfY = crop.nextStartY != null
+      ? Math.max(0, crop.nextStartY + 10)
+      : PDF_FOOTER_MASK_PX / scale;
+    const cropTop = Math.max(0, Math.floor(viewport.height - topPdfY * scale));
+    const cropBottom = Math.min(
+      viewport.height,
+      Math.max(cropTop + 80, Math.ceil(viewport.height - bottomPdfY * scale))
+    );
+    const cropHeight = cropBottom - cropTop;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = cropHeight;
+    canvas.className = "pdf-page-canvas pdf-page-canvas--cropped";
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = PDF_MASK_COLOR;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(
+      sourceCanvas,
+      0,
+      cropTop,
+      viewport.width,
+      cropHeight,
+      0,
+      0,
+      viewport.width,
+      cropHeight
+    );
+
+    container.innerHTML = "";
+    container.appendChild(canvas);
+  } catch (err) {
+    container.innerHTML =
+      `<span class="page-error">Could not render cropped question: ${escapeHtml(err.message)}</span>`;
   }
 }
 
