@@ -61,6 +61,30 @@ test("written extraction uses Section B and excludes Section A", () => {
   assert.ok(questions[0].text.includes("Define acceleration"));
 });
 
+test("NCE written extraction drops first page before question splitting", () => {
+  const pages = [
+    [
+      "NATIONAL CERTIFICATE OF EDUCATION",
+      "READ THESE INSTRUCTIONS FIRST",
+      "1. Write your index number in the space provided above.",
+    ].join("\n"),
+    [
+      "\x031 Solve 2x + 5 = 13.",
+      "Show your working.",
+    ].join("\n"),
+  ];
+
+  const writtenPages = getWrittenQuestionPages(pages, { dropFirstPage: true });
+  assert.equal(writtenPages.length, 2);
+  assert.equal(writtenPages[0], "");
+  assert.ok(writtenPages[1].includes("Solve 2x"));
+
+  const questions = splitIntoQuestions(writtenPages);
+  assert.equal(questions.length, 1);
+  assert.equal(questions[0].startPage, 2);
+  assert.ok(!questions[0].text.includes("Write your index number"));
+});
+
 test("written generation rejects whole MCQ instruction blocks", () => {
   const text = [
     "11. Circle the correct answer. Each item carries 1 mark.",
