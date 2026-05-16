@@ -134,6 +134,38 @@ test("question splitting records crop metadata between questions on the same pag
   assert.equal(questions[2].crop.nextStartY, 420);
 });
 
+test("non-NCE written questions can also carry crop metadata", () => {
+  const pages = [
+    [
+      "\x011 Define acceleration.",
+      "Give the SI unit.",
+      "[2]",
+      "\x012 State Newton's second law.",
+      "Use F = ma.",
+      "[2]",
+    ].join("\n"),
+  ];
+  const layouts = [[
+    { y: 720 },
+    { y: 690 },
+    { y: 660 },
+    { y: 600 },
+    { y: 570 },
+    { y: 540 },
+  ]];
+
+  const questions = splitIntoQuestions(pages, null, {
+    pageLineLayouts: layouts,
+    includeCropMeta: true,
+  });
+
+  assert.equal(questions.length, 2);
+  assert.equal(questions[0].crop.cropped, true);
+  assert.equal(questions[0].crop.page, 1);
+  assert.equal(questions[0].crop.startY, 720);
+  assert.equal(questions[0].crop.nextStartY, 600);
+});
+
 test("written generation rejects whole MCQ instruction blocks", () => {
   const text = [
     "11. Circle the correct answer. Each item carries 1 mark.",

@@ -917,8 +917,13 @@ function renderPaper(paper, seed) {
     const lowTextCoverage       = debug.lowTextCoverage       ?? false;
     const avgCharsPerPage       = debug.avgCharsPerPage       ?? 0;
     const cropInfo = q.crop || null;
-    const outputModeLabel = cropInfo?.cropped ? "Cropped question" : "Full source page";
-    const outputModeClass = cropInfo?.cropped ? "ai-debug-crop-tag--cropped" : "ai-debug-crop-tag--full";
+    const canRenderCrop = Boolean(cropInfo?.cropped && sp === ep);
+    const outputModeLabel = canRenderCrop
+      ? "Cropped question"
+      : cropInfo?.cropped
+        ? "Full source page (multi-page)"
+        : "Full source page";
+    const outputModeClass = canRenderCrop ? "ai-debug-crop-tag--cropped" : "ai-debug-crop-tag--full";
 
     // The single assigned topic for this question
     const assignedTopicId = q.topics[0] ?? "unclassified";
@@ -1011,7 +1016,7 @@ function renderPaper(paper, seed) {
             <span class="ai-debug-value">
               <span class="ai-debug-crop-tag ${outputModeClass}">${outputModeLabel}</span>
               ${
-                cropInfo?.cropped
+                canRenderCrop
                   ? `<button type="button" class="btn-link source-preview-btn" data-pdf-url="${escapeHtml(q.pdfUrl)}" data-page="${sp}">View original page</button>`
                   : ""
               }
@@ -1054,7 +1059,7 @@ function renderPaper(paper, seed) {
 
     // Render pages immediately — no toggle needed; canvas is the primary view.
     const pagesContainer = div.querySelector(".question-pages-container");
-    if (cropInfo?.cropped) {
+    if (canRenderCrop) {
       renderPdfCrop(pagesContainer, q.pdfUrl, cropInfo);
       const previewButton = div.querySelector(".source-preview-btn");
       const previewContainer = div.querySelector(".source-preview-container");

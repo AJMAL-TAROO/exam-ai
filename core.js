@@ -1476,19 +1476,17 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
     try {
       const isNcePaper = /(?:^|\/)assets\/nce\//i.test(url.replace(/\\/g, "/"));
       const pdfDoc = await loadPdf(url);
-      const extracted = isNcePaper
-        ? await extractAllPagesTextWithLayout(pdfDoc)
-        : { texts: await extractAllPagesText(pdfDoc), layouts: [] };
+      const extracted = await extractAllPagesTextWithLayout(pdfDoc);
       const rawPages = extracted.texts;
       const writtenPages = getWrittenQuestionPages(rawPages, { dropFirstPage: isNcePaper });
       const writtenLayouts = isNcePaper && extracted.layouts.length > 0
         ? [[], ...extracted.layouts.slice(1)]
-        : undefined;
+        : extracted.layouts;
       // Capture extraction metadata (mode, candidate count, coverage) for debugInfo.
       const extractionMeta = {};
       const questions = splitIntoQuestions(writtenPages, extractionMeta, {
         pageLineLayouts: writtenLayouts,
-        includeCropMeta: isNcePaper,
+        includeCropMeta: true,
       });
       for (const q of questions) {
         if (isLikelyMcqInstructionBlock(q.text)) continue;
