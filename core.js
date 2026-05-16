@@ -40,12 +40,12 @@ export async function loadPdf(url) {
  * @param {PDFPageProxy} page
  * @returns {Promise<string>}
  */
-export async function extractPageText(page) {
+async function extractPageTextAndLayout(page) {
   const content = await page.getTextContent();
 
   // Collect items that have text content.
   const allItems = content.items.filter((item) => item.str);
-  if (allItems.length === 0) return "";
+  if (allItems.length === 0) return { text: "", lines: [] };
 
   // ── Step 1: Cluster items into lines ────────────────────────────────────
   // Sort all items by y descending (higher y = higher on the page in PDF
@@ -79,7 +79,7 @@ export async function extractPageText(page) {
   const largeGapThreshold = LARGE_GAP_MULTIPLIER * medianGap;
 
   // ── Step 3: Build line strings with prefix markers ───────────────────────
-  return lineGroups
+  const lines = lineGroups
     .map((group, groupIdx) => {
       // Sort items left→right by x position.
       const sorted = group.items.sort((a, b) => a.transform[4] - b.transform[4]);
@@ -131,10 +131,24 @@ export async function extractPageText(page) {
       if (hasLargeGapAbove)  prefix += LARGE_GAP_PREFIX;
       if (isLeftMargin)      prefix += LEFT_MARGIN_PREFIX;
 
-      return prefix + line;
+      return {
+        text: prefix + line,
+        plainText: line,
+        y: group.y,
+        firstX,
+      };
     })
-    .filter(Boolean)
-    .join("\n");
+    .filter(Boolean);
+
+  return {
+    text: lines.map((line) => line.text).join("\n"),
+    lines,
+  };
+}
+
+export async function extractPageText(page) {
+  const result = await extractPageTextAndLayout(page);
+  return result.text;
 }
 
 /**
@@ -149,6 +163,23 @@ export async function extractAllPagesText(pdfDoc) {
     pages.push(await extractPageText(page));
   }
   return pages;
+}
+
+/**
+ * Extract text and line-position metadata from all pages.
+ * @param {PDFDocumentProxy} pdfDoc
+ * @returns {Promise<{ texts: string[], layouts: Array<Array<{ text: string, plainText: string, y: number, firstX: number }>> }>}
+ */
+async function extractAllPagesTextWithLayout(pdfDoc) {
+  const texts = [];
+  const layouts = [];
+  for (let i = 1; i <= pdfDoc.numPages; i++) {
+    const page = await pdfDoc.getPage(i);
+    const result = await extractPageTextAndLayout(page);
+    texts.push(result.text);
+    layouts.push(result.lines);
+  }
+  return { texts, layouts };
 }
 
 // ─── Header / footer cleaning ─────────────────────────────────────────────────
@@ -616,13 +647,15 @@ function assessTextCoverage(pageTexts) {
  * @param {string[]} pageTexts — raw text per page (cleaning is applied here)
  * @param {Object}  [outMeta]  — optional object to receive extraction metadata:
  *   { extractionMode, candidateHeadersFound, lowTextCoverage, avgCharsPerPage }
- * @returns {{ number: number, text: string, startPage: number, endPage: number, blankPages: number[] }[]}
+ * @param {{ pageLineLayouts?: Array<Array<{ y: number }>>, includeCropMeta?: boolean }} [opts]
+ * @returns {{ number: number, text: string, startPage: number, endPage: number, blankPages: number[], crop?: object }[]}
  */
-export function splitIntoQuestions(pageTexts, outMeta = null) {
+export function splitIntoQuestions(pageTexts, outMeta = null, opts = {}) {
   // Build a flat line array and a parallel array mapping each line to its
   // 1-based source page number.
   const lines       = [];
   const linePageMap = []; // linePageMap[i] = 1-based page number
+  const lineLayoutMap = [];
 
   // Detect blank pages (pages that explicitly say "BLANK PAGE") so they can be
   // excluded from the rendered output.
@@ -645,6 +678,7 @@ export function splitIntoQuestions(pageTexts, outMeta = null) {
       if (STANDALONE_NUMBER_RE.test(stripPrefixes(line)) && (li < 3 || li >= rawLines.length - 3)) continue;
       lines.push(line);
       linePageMap.push(p + 1);
+      lineLayoutMap.push(opts.pageLineLayouts?.[p]?.[li] ?? null);
     }
   }
 
@@ -775,6 +809,20 @@ export function splitIntoQuestions(pageTexts, outMeta = null) {
     if (text.length > 10) {
       // Collect blank pages that fall within this question's FINAL page range.
       const blankPages = [...blankPageNums].filter((p) => p >= startPage && p <= endPage);
+      const startLayout = lineLayoutMap[start];
+      const nextStart = i + 1 < questionStarts.length ? questionStarts[i + 1].index : null;
+      const nextLayout = nextStart !== null && linePageMap[nextStart] === startPage
+        ? lineLayoutMap[nextStart]
+        : null;
+      const crop = opts.includeCropMeta && startLayout
+        ? {
+          cropped: true,
+          boundedByNext: Boolean(nextLayout),
+          page: startPage,
+          startY: startLayout.y,
+          nextStartY: nextLayout?.y ?? null,
+        }
+        : null;
       questions.push({
         number: questionStarts[i].number,
         text,
@@ -782,6 +830,7 @@ export function splitIntoQuestions(pageTexts, outMeta = null) {
         startPage,
         endPage,
         blankPages,
+        ...(crop && { crop }),
       });
     }
   }
@@ -1427,11 +1476,20 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
     try {
       const isNcePaper = /(?:^|\/)assets\/nce\//i.test(url.replace(/\\/g, "/"));
       const pdfDoc = await loadPdf(url);
-      const rawPages = await extractAllPagesText(pdfDoc);
+      const extracted = isNcePaper
+        ? await extractAllPagesTextWithLayout(pdfDoc)
+        : { texts: await extractAllPagesText(pdfDoc), layouts: [] };
+      const rawPages = extracted.texts;
       const writtenPages = getWrittenQuestionPages(rawPages, { dropFirstPage: isNcePaper });
+      const writtenLayouts = isNcePaper && extracted.layouts.length > 0
+        ? [[], ...extracted.layouts.slice(1)]
+        : undefined;
       // Capture extraction metadata (mode, candidate count, coverage) for debugInfo.
       const extractionMeta = {};
-      const questions = splitIntoQuestions(writtenPages, extractionMeta);
+      const questions = splitIntoQuestions(writtenPages, extractionMeta, {
+        pageLineLayouts: writtenLayouts,
+        includeCropMeta: isNcePaper,
+      });
       for (const q of questions) {
         if (isLikelyMcqInstructionBlock(q.text)) continue;
 
@@ -1446,6 +1504,7 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
           topics: tagTopics(q.text, topics),
           startPage: q.startPage,
           endPage:   q.endPage,
+          ...(q.crop && { crop: q.crop }),
           blankPages: q.blankPages ?? [],
           debugInfo: {
             matchedLine:           q.matchedLine,
