@@ -9,9 +9,11 @@ import {
   generateMcqPaper,
   getMcqQuestionPages,
   getWrittenQuestionPages,
+  isPeriodicTableReferencePage,
   isLikelyMcqInstructionBlock,
   splitIntoMcqQuestions,
   splitIntoQuestions,
+  trimTrailingPeriodicTablePages,
 } from "../core.js";
 
 let passed = 0;
@@ -164,6 +166,48 @@ test("non-NCE written questions can also carry crop metadata", () => {
   assert.equal(questions[0].crop.page, 1);
   assert.equal(questions[0].crop.startY, 720);
   assert.equal(questions[0].crop.nextStartY, 600);
+});
+
+test("periodic table reference detection requires periodic table and elements", () => {
+  assert.equal(
+    isPeriodicTableReferencePage("THE PERIODIC TABLE OF ELEMENTS\nGroup I II III"),
+    true
+  );
+  assert.equal(
+    isPeriodicTableReferencePage("Periodic Table - selected chemical elements"),
+    true
+  );
+  assert.equal(
+    isPeriodicTableReferencePage("Complete the table of elements shown below."),
+    false
+  );
+  assert.equal(
+    isPeriodicTableReferencePage("Use the periodic table to answer the question."),
+    false
+  );
+});
+
+test("trailing periodic table trim drops the reference page and later pages", () => {
+  const pages = [
+    "\x011 Define ionic bonding.\nAnswer:",
+    "\x012 Explain electrolysis.\nAnswer:",
+    "The Periodic Table of Elements",
+    "Extra blank/reference page",
+  ];
+  const layouts = [
+    [{ y: 720 }],
+    [{ y: 720 }],
+    [{ y: 720 }],
+    [{ y: 720 }],
+  ];
+  const result = trimTrailingPeriodicTablePages(pages, layouts);
+
+  assert.equal(result.trimmed, true);
+  assert.equal(result.trimmedFromPage, 3);
+  assert.equal(result.texts.length, 2);
+  assert.equal(result.layouts.length, 2);
+  assert.ok(result.texts[0].includes("Define ionic bonding"));
+  assert.ok(result.texts[1].includes("Explain electrolysis"));
 });
 
 test("written generation rejects whole MCQ instruction blocks", () => {
