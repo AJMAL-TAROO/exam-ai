@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import {
   generateMcqPaper,
+  generatePaper,
   getMcqQuestionPages,
   getWrittenQuestionPages,
   isPeriodicTableReferencePage,
@@ -422,6 +423,30 @@ test("MCQ generation filters by topic and remains seed reproducible", () => {
   assert.equal(first.length, 1);
   assert.equal(first[0].stem, "S1");
   assert.deepEqual(first.map((q) => q.number), second.map((q) => q.number));
+});
+
+test("mixed written generation excludes unclassified questions", () => {
+  const index = [
+    { pdfUrl: "a.pdf", number: 1, text: "Classified", topics: ["motion"] },
+    { pdfUrl: "a.pdf", number: 2, text: "Unclassified", topics: ["unclassified"] },
+  ];
+
+  const paper = generatePaper(index, { topics: null, count: 10, seed: 3 });
+
+  assert.equal(paper.length, 1);
+  assert.equal(paper[0].number, 1);
+});
+
+test("mixed MCQ generation excludes unclassified questions", () => {
+  const index = [
+    { pdfUrl: "a.pdf", number: 1, stem: "S1", options: { A: "a", B: "b", C: "c", D: "d" }, topics: ["motion"] },
+    { pdfUrl: "a.pdf", number: 2, stem: "S2", options: { A: "a", B: "b", C: "c", D: "d" }, topics: ["unclassified"] },
+  ];
+
+  const paper = generateMcqPaper(index, { topics: null, count: 10, seed: 3 });
+
+  assert.equal(paper.length, 1);
+  assert.equal(paper[0].number, 1);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

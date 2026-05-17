@@ -1726,11 +1726,11 @@ export function seededShuffle(array, seed) {
  * @returns {QuestionEntry[]}
  */
 export function generatePaper(index, { topics = null, count = 10, seed = null }) {
-  let pool = index;
+  let pool = index.filter((q) => !q.topics?.includes("unclassified"));
 
   // Filter by topics if requested
   if (topics && topics.length > 0) {
-    pool = index.filter((q) => q.topics.some((t) => topics.includes(t)));
+    pool = pool.filter((q) => q.topics.some((t) => topics.includes(t)));
   }
 
   // Deduplicate by (pdfUrl, question number) so no question ever appears twice
