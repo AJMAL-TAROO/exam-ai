@@ -873,6 +873,43 @@ function slicePageBeforeSection(pageText, sectionRe) {
   return idx >= 0 ? lines.slice(0, idx).join("\n") : pageText;
 }
 
+const CHEMISTRY_QUESTION_PAPER_RE =
+  /(?:^|\/)assets\/(?:nce|o-level|a-level)\/chemistry\/question-papers\//i;
+
+function isChemistryQuestionPaperUrl(url) {
+  return CHEMISTRY_QUESTION_PAPER_RE.test(url.replace(/\\/g, "/"));
+}
+
+export function isPeriodicTableReferencePage(pageText) {
+  const text = pageText
+    .replace(/[\x01\x02\x03]/g, " ")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+
+  return /\bperiodic\s+table\b/.test(text) && /\belements?\b/.test(text);
+}
+
+export function trimTrailingPeriodicTablePages(pageTexts, pageLayouts = null) {
+  const layouts = pageLayouts ? [...pageLayouts] : null;
+
+  for (let i = pageTexts.length - 1; i >= 0; i--) {
+    if (!isPeriodicTableReferencePage(pageTexts[i])) continue;
+    return {
+      texts: pageTexts.slice(0, i),
+      layouts: layouts ? layouts.slice(0, i) : null,
+      trimmed: true,
+      trimmedFromPage: i + 1,
+    };
+  }
+
+  return {
+    texts: [...pageTexts],
+    layouts,
+    trimmed: false,
+    trimmedFromPage: null,
+  };
+}
+
 /**
  * Return only the written-question region from page text.  For combined NCE
  * papers this means Section B onward; papers without Section B are unchanged.
@@ -924,6 +961,35 @@ export function getMcqQuestionPages(pageTexts) {
   });
 
   return sliced.filter((pageText) => pageText.replace(/[\x01\x02\x03]/g, "").trim().length > 0);
+}
+
+function prepareWrittenPages(pageTexts, pageLayouts, { isNcePaper, trimPeriodicTable }) {
+  const trimmed = trimPeriodicTable
+    ? trimTrailingPeriodicTablePages(pageTexts, pageLayouts)
+    : {
+        texts: pageTexts,
+        layouts: pageLayouts,
+        trimmed: false,
+        trimmedFromPage: null,
+      };
+  const writtenPages = getWrittenQuestionPages(trimmed.texts, {
+    dropFirstPage: isNcePaper,
+  });
+  const writtenLayouts = isNcePaper && trimmed.layouts?.length > 0
+    ? [[], ...trimmed.layouts.slice(1)]
+    : trimmed.layouts;
+
+  return { writtenPages, writtenLayouts, trimmed };
+}
+
+function splitWrittenPagesWithCrop(writtenPages, writtenLayouts) {
+  const extractionMeta = {};
+  const questions = splitIntoQuestions(writtenPages, extractionMeta, {
+    pageLineLayouts: writtenLayouts,
+    includeCropMeta: true,
+  });
+
+  return { questions, extractionMeta };
 }
 
 const MCQ_START_RE =
@@ -1477,17 +1543,27 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
       const isNcePaper = /(?:^|\/)assets\/nce\//i.test(url.replace(/\\/g, "/"));
       const pdfDoc = await loadPdf(url);
       const extracted = await extractAllPagesTextWithLayout(pdfDoc);
-      const rawPages = extracted.texts;
-      const writtenPages = getWrittenQuestionPages(rawPages, { dropFirstPage: isNcePaper });
-      const writtenLayouts = isNcePaper && extracted.layouts.length > 0
-        ? [[], ...extracted.layouts.slice(1)]
-        : extracted.layouts;
-      // Capture extraction metadata (mode, candidate count, coverage) for debugInfo.
-      const extractionMeta = {};
-      const questions = splitIntoQuestions(writtenPages, extractionMeta, {
-        pageLineLayouts: writtenLayouts,
-        includeCropMeta: true,
+      const shouldTrimPeriodicTable = isChemistryQuestionPaperUrl(url);
+      let prepared = prepareWrittenPages(extracted.texts, extracted.layouts, {
+        isNcePaper,
+        trimPeriodicTable: shouldTrimPeriodicTable,
       });
+      let { questions, extractionMeta } = splitWrittenPagesWithCrop(
+        prepared.writtenPages,
+        prepared.writtenLayouts
+      );
+
+      if (questions.length === 0 && shouldTrimPeriodicTable && prepared.trimmed.trimmed) {
+        prepared = prepareWrittenPages(extracted.texts, extracted.layouts, {
+          isNcePaper,
+          trimPeriodicTable: false,
+        });
+        ({ questions, extractionMeta } = splitWrittenPagesWithCrop(
+          prepared.writtenPages,
+          prepared.writtenLayouts
+        ));
+      }
+
       for (const q of questions) {
         if (isLikelyMcqInstructionBlock(q.text)) continue;
 
@@ -1542,14 +1618,30 @@ export async function buildMcqIndex(pdfUrls, topics, onProgress) {
     try {
       const pdfDoc = await loadPdf(url);
       const rawPages = await extractAllPagesText(pdfDoc);
-      const mcqPages = getMcqQuestionPages(rawPages);
-      const extractionMeta = {};
       const isNcePaper = /(?:^|\/)assets\/nce\//i.test(url.replace(/\\/g, "/"));
-      const questions = splitIntoMcqQuestions(
-        mcqPages,
+      const shouldTrimPeriodicTable = isChemistryQuestionPaperUrl(url);
+      const trimmed = shouldTrimPeriodicTable
+        ? trimTrailingPeriodicTablePages(rawPages)
+        : {
+            texts: rawPages,
+            trimmed: false,
+            trimmedFromPage: null,
+          };
+      let extractionMeta = {};
+      let questions = splitIntoMcqQuestions(
+        getMcqQuestionPages(trimmed.texts),
         extractionMeta,
         { mode: isNcePaper ? "nce-section-a" : "numbered" }
       );
+
+      if (questions.length === 0 && shouldTrimPeriodicTable && trimmed.trimmed) {
+        extractionMeta = {};
+        questions = splitIntoMcqQuestions(
+          getMcqQuestionPages(rawPages),
+          extractionMeta,
+          { mode: isNcePaper ? "nce-section-a" : "numbered" }
+        );
+      }
 
       for (const q of questions) {
         const key = `${url}||${q.number}`;
