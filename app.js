@@ -16,6 +16,11 @@ import { TOPICS_O } from "./subjects/topics-o.js";
 import { TOPICS_A } from "./subjects/topics-a.js";
 import { TOPICS_NCE } from "./subjects/topics-nce.js";
 import { buildPaperPath } from "./pathUtils.js";
+import {
+  consumeExamAiCredit,
+  loadExamAiContext,
+  refreshCurrentMonthCredit,
+} from "./firebaseBackend.js";
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -30,6 +35,8 @@ const state = {
   questionIndex: [],    // built index
   manifest: null,       // loaded manifest.json
   topics: [],           // current topic list
+  examContext: null,    // Firebase session, tutor, plan, and credit context
+  allowedSubjects: [],  // tutor subjects mapped to manifest keys
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -89,6 +96,79 @@ function setLoading(buttonId, loading) {
   btn.textContent = loading ? btn.dataset.loadingText || "Working…" : btn.dataset.originalText;
 }
 
+function setWorkflowEnabled(enabled) {
+  [
+    "level-select",
+    "subject-select",
+    "scan-btn",
+    "build-index-btn",
+    "generate-btn",
+    "download-btn",
+  ].forEach((id) => {
+    const el = $(id);
+    if (el) el.disabled = !enabled;
+  });
+
+  document
+    .querySelectorAll('input[name="paper-type"], input[name="paper-number"], input[name="mode"]')
+    .forEach((input) => {
+      input.disabled = !enabled;
+    });
+}
+
+function getSessionToken() {
+  return new URLSearchParams(window.location.search).get("session")?.trim() || "";
+}
+
+function setSessionStatus(message, type = "info") {
+  const el = $("auth-status");
+  if (!el) return;
+  el.textContent = message;
+  el.className = `status status--${type}`;
+  el.hidden = !message;
+}
+
+function updateContextPanel() {
+  const context = state.examContext;
+  if (!context) return;
+
+  const tutorEl = $("tutor-name");
+  if (tutorEl) tutorEl.textContent = context.tutorName;
+
+  const planEl = $("plan-name");
+  if (planEl) planEl.textContent = context.plan;
+
+  const subjectCountEl = $("subject-count");
+  if (subjectCountEl) {
+    subjectCountEl.textContent = `${state.allowedSubjects.length} subject${state.allowedSubjects.length === 1 ? "" : "s"}`;
+  }
+
+  updateCreditPanel(context.credit);
+}
+
+function updateCreditPanel(credit) {
+  if (!credit) return;
+
+  const creditEl = $("credit-summary");
+  if (creditEl) {
+    creditEl.textContent = `${credit.remaining}/${credit.limit} credits left`;
+  }
+
+  const monthEl = $("month-summary");
+  if (monthEl) {
+    monthEl.textContent = `Month ${credit.monthKey}`;
+  }
+
+  const generateBtn = $("generate-btn");
+  if (generateBtn) {
+    generateBtn.disabled = credit.remaining <= 0;
+  }
+}
+
+function allowedSubjectLabel(subjectKey) {
+  return state.allowedSubjects.find((subject) => subject.key === subjectKey)?.label;
+}
+
 function getTopicMapForLevel(level) {
   if (level === "o-level") return TOPICS_O;
   if (level === "a-level") return TOPICS_A;
@@ -145,6 +225,9 @@ function resetDownstreamFromPaperType() {
 }
 
 function formatSubjectLabel(subjectKey) {
+  const tutorLabel = allowedSubjectLabel(subjectKey);
+  if (tutorLabel) return tutorLabel;
+
   return SUBJECT_LABELS[subjectKey] ||
     subjectKey.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -235,18 +318,29 @@ function getCompatiblePaperNumbers(subjectData, paperType, level, subject) {
 
 function populateSubjectOptions(levelKey, manifest) {
   const subjectSelect = $("subject-select");
-  subjectSelect.innerHTML = '<option value="">— choose subject —</option>';
+  subjectSelect.innerHTML = '<option value="">- choose subject -</option>';
 
-  const subjects = Object.keys(manifest?.[levelKey] || {}).sort((a, b) =>
-    formatSubjectLabel(a).localeCompare(formatSubjectLabel(b))
-  );
+  const manifestSubjects = manifest?.[levelKey] || {};
+  const subjects = state.allowedSubjects
+    .filter((subject) => manifestSubjects[subject.key])
+    .sort((a, b) => a.label.localeCompare(b.label));
 
-  subjects.forEach((subjectKey) => {
+  subjects.forEach((subject) => {
     const option = document.createElement("option");
-    option.value = subjectKey;
-    option.textContent = formatSubjectLabel(subjectKey);
+    option.value = subject.key;
+    option.textContent = subject.label;
     subjectSelect.appendChild(option);
   });
+
+  if (subjects.length === 0) {
+    setStatus(
+      "subject",
+      "No mapped Exam AI subjects are available for this level.",
+      "warn"
+    );
+  } else {
+    setStatus("subject", "");
+  }
 }
 
 function renderPaperOptions(paperNumbers) {
@@ -279,6 +373,32 @@ async function loadManifest() {
 
 // ─── Step 1 + 2: Level & Subject selection ────────────────────────────────────
 
+async function bootstrapExamAiSession() {
+  setWorkflowEnabled(false);
+  setSessionStatus("Checking TAW session...");
+
+  try {
+    state.examContext = await loadExamAiContext(getSessionToken());
+    state.allowedSubjects = state.examContext.allowedSubjects;
+    await loadManifest();
+    updateContextPanel();
+    setSessionStatus("Connected to TAW.", "success");
+    setWorkflowEnabled(true);
+
+    if (state.allowedSubjects.length === 0) {
+      setWorkflowEnabled(false);
+      setSessionStatus(
+        "No mapped subjects were found for this tutor. Check ADMIN/<adminId>/SUBJECTS.",
+        "warn"
+      );
+    }
+  } catch (err) {
+    console.error(err);
+    setWorkflowEnabled(false);
+    setSessionStatus(err.message || "Could not connect Exam AI to TAW.", "error");
+  }
+}
+
 async function onLevelChange(e) {
   state.level = e.target.value || null;
   state.subject = null;
@@ -290,7 +410,8 @@ async function onLevelChange(e) {
 
   // Reset subject selector
   const subjectSelect = $("subject-select");
-  subjectSelect.innerHTML = '<option value="">— choose subject —</option>';
+  subjectSelect.innerHTML = '<option value="">- choose subject -</option>';
+  setStatus("subject", "");
 
   $("paper-number-options").innerHTML = "";
   document.querySelectorAll('input[name="paper-type"]').forEach((radio) => {
@@ -805,7 +926,12 @@ function onModeChange(e) {
 
 // ─── Step 6: Generate Paper ───────────────────────────────────────────────────
 
-function onGenerateClick() {
+async function onGenerateClick() {
+  if (!state.examContext) {
+    setStatus("generate", "Open Exam AI from TAW before generating a paper.", "warn");
+    return;
+  }
+
   const count = parseInt($("question-count").value, 10) || 10;
   const seedInput = $("seed-input").value.trim();
   const seed = seedInput !== "" ? parseInt(seedInput, 10) : null;
@@ -834,9 +960,39 @@ function onGenerateClick() {
     return;
   }
 
-  setStatus("generate", `✓ Generated ${paper.length} question(s).`, "success");
-  renderPaper(paper, seed);
-  showSection("paper-section");
+  setLoading("generate-btn", true);
+  setStatus("generate", "Checking credits...");
+
+  try {
+    const latestCredit = await refreshCurrentMonthCredit(state.examContext);
+    updateCreditPanel(latestCredit);
+
+    if (latestCredit.remaining <= 0) {
+      setStatus(
+        "generate",
+        `No Exam AI credits left for ${latestCredit.monthKey}. Credits renew next month.`,
+        "warn"
+      );
+      return;
+    }
+
+    const updatedCredit = await consumeExamAiCredit(state.examContext);
+    updateCreditPanel(updatedCredit);
+    setStatus(
+      "generate",
+      `Generated ${paper.length} question(s). ${updatedCredit.remaining}/${updatedCredit.limit} credits left.`,
+      "success"
+    );
+    renderPaper(paper, seed);
+    showSection("paper-section");
+  } catch (err) {
+    console.error(err);
+    setStatus("generate", err.message || "Could not spend Exam AI credit.", "error");
+    return;
+  } finally {
+    setLoading("generate-btn", false);
+    updateCreditPanel(state.examContext.credit);
+  }
 
   // Store for download
   $("download-btn").dataset.paper = JSON.stringify(
@@ -1333,6 +1489,8 @@ function onDownloadClick() {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 function init() {
+  setWorkflowEnabled(false);
+
   // Wire up level + subject
   $("level-select").addEventListener("change", onLevelChange);
   $("subject-select").addEventListener("change", onSubjectChange);
@@ -1376,6 +1534,8 @@ function init() {
     "generate-section",
     "paper-section",
   ].forEach(hideSection);
+
+  bootstrapExamAiSession();
 }
 
 document.addEventListener("DOMContentLoaded", init);
