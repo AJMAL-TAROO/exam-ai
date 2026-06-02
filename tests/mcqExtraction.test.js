@@ -12,6 +12,7 @@ import {
   getWrittenQuestionPages,
   isPeriodicTableReferencePage,
   isLikelyMcqInstructionBlock,
+  mapQuestionToPhysicalPages,
   splitIntoMcqQuestions,
   splitIntoQuestions,
   trimTrailingPeriodicTablePages,
@@ -86,6 +87,129 @@ test("NCE written extraction drops first page before question splitting", () => 
   assert.equal(questions.length, 1);
   assert.equal(questions[0].startPage, 2);
   assert.ok(!questions[0].text.includes("Write your index number"));
+});
+
+test("NCE question-based extraction starts at flexible Question 2 markers", () => {
+  const markerForms = [
+    "Question 2",
+    "Question 2.",
+    "Question 2 (9 marks)",
+    "Qu 2",
+    "Qu 2.",
+    "Qu. 2 (10 Marks)",
+    "Q2",
+    "Q 2 (8 marks)",
+  ];
+
+  for (const marker of markerForms) {
+    const pages = [
+      "NATIONAL CERTIFICATE OF EDUCATION",
+      [
+        "SECTION A",
+        "\x034 Which one of the following represents an oxygen molecule?",
+        "A H H",
+        "B Cl Cl",
+        "C F F",
+        "D O O",
+      ].join("\n"),
+      [
+        `\x01${marker} Define an acid.`,
+        "Give one example.",
+      ].join("\n"),
+    ];
+
+    const writtenPages = getWrittenQuestionPages(pages, {
+      dropFirstPage: true,
+      startAtQuestion2OrSectionB: true,
+    });
+    const text = writtenPages.join("\n");
+
+    assert.ok(text.includes("Define an acid"), marker);
+    assert.ok(!text.includes("oxygen molecule"), marker);
+  }
+});
+
+test("NCE question-based extraction can start at numeric Question 2 after Section A", () => {
+  const pages = [
+    "NATIONAL CERTIFICATE OF EDUCATION",
+    [
+      "SECTION A",
+      "\x034 Which one of the following represents an oxygen molecule?",
+      "A H H",
+      "B Cl Cl",
+      "C F F",
+      "D O O",
+    ].join("\n"),
+    [
+      "\x012. Define an acid.",
+      "Give one example.",
+    ].join("\n"),
+  ];
+
+  const writtenPages = getWrittenQuestionPages(pages, {
+    dropFirstPage: true,
+    startAtQuestion2OrSectionB: true,
+  });
+  const questions = splitIntoQuestions(writtenPages, null, {
+    allowedFirstQuestionNumbers: [1, 2],
+  });
+
+  assert.ok(writtenPages.join("\n").includes("Define an acid"));
+  assert.ok(!writtenPages.join("\n").includes("oxygen molecule"));
+  assert.equal(questions.length, 1);
+  assert.equal(questions[0].number, 2);
+});
+
+test("NCE question-based extraction detects Question 2 split across nearby lines", () => {
+  const pages = [
+    "NATIONAL CERTIFICATE OF EDUCATION",
+    [
+      "SECTION A",
+      "\x034 Which one of the following represents an oxygen molecule?",
+      "A H H",
+      "B Cl Cl",
+      "C F F",
+      "D O O",
+    ].join("\n"),
+    [
+      "\x01Question",
+      "2 (9 marks)",
+      "(a) Match the symbol of each element to its correct name.",
+    ].join("\n"),
+  ];
+
+  const writtenPages = getWrittenQuestionPages(pages, {
+    dropFirstPage: true,
+    startAtQuestion2OrSectionB: true,
+  });
+  const text = writtenPages.join("\n");
+
+  assert.ok(text.includes("2 (9 marks)"));
+  assert.ok(text.includes("Match the symbol"));
+  assert.ok(!text.includes("oxygen molecule"));
+});
+
+test("physical page mapping restores PDF page numbers after virtual NCE drop", () => {
+  const question = {
+    number: 2,
+    text: "Question 2",
+    startPage: 1,
+    endPage: 2,
+    blankPages: [2],
+    crop: {
+      cropped: true,
+      page: 1,
+      startY: 720,
+      nextStartY: null,
+    },
+  };
+
+  const mapped = mapQuestionToPhysicalPages(question, 5);
+
+  assert.equal(mapped.startPage, 6);
+  assert.equal(mapped.endPage, 7);
+  assert.deepEqual(mapped.blankPages, [7]);
+  assert.equal(mapped.crop.page, 6);
 });
 
 test("question splitting records crop metadata between questions on the same page", () => {

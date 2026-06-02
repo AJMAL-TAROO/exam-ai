@@ -562,9 +562,10 @@ function hasSubpartSoon(lines, startIdx, lookahead = GEOMETRIC_SUBPART_LOOKAHEAD
  * @param {RegExp}   candidateRE — regex used to identify candidate lines
  * @returns {{ index: number, number: number, candidatesConsidered: number }[]}
  */
-function scanForQuestionStarts(lines, candidateRE) {
+function scanForQuestionStarts(lines, candidateRE, opts = {}) {
   const starts = [];
   let candidatesConsidered = 0;
+  const allowedFirstQuestionNumbers = opts.allowedFirstQuestionNumbers ?? [1];
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(candidateRE);
     if (!m) continue;
@@ -579,7 +580,7 @@ function scanForQuestionStarts(lines, candidateRE) {
     // accepted question to be Q1 prevents stray page-number headers (e.g. the
     // page number "2" at the top of page 2) from being mistakenly accepted as
     // the first question, which would then cause Q1 to be skipped entirely.
-    if (!prev && num !== 1) continue;
+    if (!prev && !allowedFirstQuestionNumbers.includes(num)) continue;
     // Allow a gap of up to MAX_QUESTION_NUMBER_GAP in the sequence so that
     // a single missed question header does not cause all later questions to be
     // discarded.  e.g. if Q3 is not detected, Q4 is still accepted after Q2.
@@ -688,20 +689,23 @@ export function splitIntoQuestions(pageTexts, outMeta = null, opts = {}) {
 
   // Three-tier candidate detection:
   // Tier 1 — bold prefix (highest precision, most common for Cambridge papers)
-  let questionStarts = scanForQuestionStarts(lines, QUESTION_CANDIDATE_RE);
+  const scanOpts = {
+    allowedFirstQuestionNumbers: opts.allowedFirstQuestionNumbers,
+  };
+  let questionStarts = scanForQuestionStarts(lines, QUESTION_CANDIDATE_RE, scanOpts);
   let extractionMode = "bold";
 
   // Tier 2 — geometric signals (large-gap or left-margin), no bold required.
   // Triggered when bold detection finds nothing.
   if (questionStarts.length === 0) {
-    questionStarts = scanForQuestionStarts(lines, QUESTION_CANDIDATE_GEOMETRIC_RE);
+    questionStarts = scanForQuestionStarts(lines, QUESTION_CANDIDATE_GEOMETRIC_RE, scanOpts);
     extractionMode = "geometric";
   }
 
   // Tier 3 — pattern-only, no prefix required.
   // Triggered when both bold and geometric detection find nothing.
   if (questionStarts.length === 0) {
-    questionStarts = scanForQuestionStarts(lines, QUESTION_CANDIDATE_FALLBACK_RE);
+    questionStarts = scanForQuestionStarts(lines, QUESTION_CANDIDATE_FALLBACK_RE, scanOpts);
     extractionMode = "pattern-only";
   }
 
@@ -841,7 +845,12 @@ export function splitIntoQuestions(pageTexts, outMeta = null, opts = {}) {
 
 const SECTION_A_RE = /^[\x01\x02\x03]*\s*section\s+a\b/i;
 const SECTION_B_RE = /^[\x01\x02\x03]*\s*section\s+b\b/i;
-const WRITTEN_QUESTION_2_RE = /^[\x01\x02\x03]*\s*Question\s+2\b/i;
+const WRITTEN_QUESTION_2_RE =
+  /^[\x01\x02\x03]*\s*(?:Question|Qu\.?|Q\.?)\s*2\b(?:\s*\.|\s*\([^)]*\))?/i;
+const WRITTEN_QUESTION_2_WINDOW_RE =
+  /(?:^|\s)(?:Question|Qu\.?|Q\.?)\s*2\b(?:\s*\.|\s*\([^)]*\))?/i;
+const WRITTEN_NUMERIC_QUESTION_2_RE =
+  /^[\x01\x02\x03]*\s*2(?:\.\s*|\s+\S)/i;
 
 function pageHasSection(pageText, sectionRe) {
   return pageText.split("\n").some((line) => sectionRe.test(line));
@@ -871,6 +880,66 @@ function slicePageBeforeSection(pageText, sectionRe) {
   const lines = pageText.split("\n");
   const idx = lines.findIndex((line) => sectionRe.test(line));
   return idx >= 0 ? lines.slice(0, idx).join("\n") : pageText;
+}
+
+function findFirstLineIndex(pageText, lineRe) {
+  return pageText.split("\n").findIndex((line) => lineRe.test(line));
+}
+
+function findQuestion2LineIndex(pageText) {
+  const lines = pageText.split("\n");
+  const direct = lines.findIndex((line) => WRITTEN_QUESTION_2_RE.test(line));
+  if (direct >= 0) return direct;
+
+  for (let i = 0; i < lines.length; i++) {
+    const windowText = lines
+      .slice(i, Math.min(lines.length, i + 3))
+      .map(stripPrefixes)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (WRITTEN_QUESTION_2_WINDOW_RE.test(windowText)) return i;
+  }
+
+  return -1;
+}
+
+function findFirstNceWrittenStart(pageTexts) {
+  const sectionAPage = findFirstSectionPage(pageTexts, SECTION_A_RE);
+
+  for (let pageIndex = 0; pageIndex < pageTexts.length; pageIndex++) {
+    const sectionBLine = findFirstLineIndex(pageTexts[pageIndex], SECTION_B_RE);
+    const question2Line = findQuestion2LineIndex(pageTexts[pageIndex]);
+    const candidates = [sectionBLine, question2Line].filter((idx) => idx >= 0);
+    if (candidates.length === 0) continue;
+    return {
+      pageIndex,
+      lineIndex: Math.min(...candidates),
+      kind: sectionBLine >= 0 && sectionBLine === Math.min(...candidates)
+        ? "section-b"
+        : "question-2",
+    };
+  }
+
+  if (sectionAPage < 0) return null;
+  for (let pageIndex = sectionAPage + 1; pageIndex < pageTexts.length; pageIndex++) {
+    const lineIndex = findFirstLineIndex(pageTexts[pageIndex], WRITTEN_NUMERIC_QUESTION_2_RE);
+    if (lineIndex < 0) continue;
+    return {
+      pageIndex,
+      lineIndex,
+      kind: "numeric-question-2",
+    };
+  }
+
+  return null;
+}
+
+function keepPageFromLine(pageText, pageLayout, lineIndex) {
+  return {
+    text: pageText.split("\n").slice(lineIndex).join("\n"),
+    layout: pageLayout ? pageLayout.slice(lineIndex) : pageLayout,
+  };
 }
 
 const CHEMISTRY_QUESTION_PAPER_RE =
@@ -923,6 +992,18 @@ export function getWrittenQuestionPages(pageTexts, opts = {}) {
     ? ["", ...pageTexts.slice(1)]
     : pageTexts;
 
+  if (opts.startAtQuestion2OrSectionB) {
+    const start = findFirstNceWrittenStart(sourcePages);
+    if (!start) return sourcePages;
+    return sourcePages.map((pageText, idx) => {
+      if (idx < start.pageIndex) return "";
+      if (idx === start.pageIndex) {
+        return pageText.split("\n").slice(start.lineIndex).join("\n");
+      }
+      return pageText;
+    });
+  }
+
   const sectionBPage = findFirstSectionPage(sourcePages, SECTION_B_RE);
   if (sectionBPage < 0) return sourcePages;
 
@@ -963,7 +1044,7 @@ export function getMcqQuestionPages(pageTexts) {
   return sliced.filter((pageText) => pageText.replace(/[\x01\x02\x03]/g, "").trim().length > 0);
 }
 
-function prepareWrittenPages(pageTexts, pageLayouts, { isNcePaper, trimPeriodicTable }) {
+function prepareWrittenPages(pageTexts, pageLayouts, { isNcePaper, trimPeriodicTable, trimNceMcqSection = true }) {
   const trimmed = trimPeriodicTable
     ? trimTrailingPeriodicTablePages(pageTexts, pageLayouts)
     : {
@@ -972,24 +1053,77 @@ function prepareWrittenPages(pageTexts, pageLayouts, { isNcePaper, trimPeriodicT
         trimmed: false,
         trimmedFromPage: null,
       };
-  const writtenPages = getWrittenQuestionPages(trimmed.texts, {
-    dropFirstPage: isNcePaper,
-  });
-  const writtenLayouts = isNcePaper && trimmed.layouts?.length > 0
-    ? [[], ...trimmed.layouts.slice(1)]
-    : trimmed.layouts;
+  let writtenPages;
+  let writtenLayouts;
+  let nceWrittenStart = null;
+  let pageOffset = 0;
 
-  return { writtenPages, writtenLayouts, trimmed };
+  if (isNcePaper) {
+    const sourcePages = trimmed.texts.length > 0
+      ? ["", ...trimmed.texts.slice(1)]
+      : trimmed.texts;
+    const sourceLayouts = trimmed.layouts?.length > 0
+      ? [[], ...trimmed.layouts.slice(1)]
+      : trimmed.layouts;
+    nceWrittenStart = trimNceMcqSection ? findFirstNceWrittenStart(sourcePages) : null;
+
+    if (nceWrittenStart) {
+      pageOffset = nceWrittenStart.pageIndex;
+      writtenPages = sourcePages.slice(nceWrittenStart.pageIndex);
+      writtenPages[0] = keepPageFromLine(
+        sourcePages[nceWrittenStart.pageIndex],
+        null,
+        nceWrittenStart.lineIndex
+      ).text;
+      writtenLayouts = sourceLayouts
+        ? sourceLayouts.slice(nceWrittenStart.pageIndex)
+        : sourceLayouts;
+      if (writtenLayouts?.length > 0) {
+        writtenLayouts[0] = keepPageFromLine(
+          sourcePages[nceWrittenStart.pageIndex],
+          sourceLayouts[nceWrittenStart.pageIndex],
+          nceWrittenStart.lineIndex
+        ).layout;
+      }
+    } else {
+      writtenPages = getWrittenQuestionPages(trimmed.texts, {
+        dropFirstPage: true,
+      });
+      writtenLayouts = sourceLayouts;
+    }
+  } else {
+    writtenPages = getWrittenQuestionPages(trimmed.texts);
+    writtenLayouts = trimmed.layouts;
+  }
+
+  return { writtenPages, writtenLayouts, trimmed, nceWrittenStart, pageOffset };
 }
 
-function splitWrittenPagesWithCrop(writtenPages, writtenLayouts) {
+function splitWrittenPagesWithCrop(writtenPages, writtenLayouts, opts = {}) {
   const extractionMeta = {};
   const questions = splitIntoQuestions(writtenPages, extractionMeta, {
     pageLineLayouts: writtenLayouts,
     includeCropMeta: true,
+    allowedFirstQuestionNumbers: opts.allowedFirstQuestionNumbers,
   });
 
   return { questions, extractionMeta };
+}
+
+export function mapQuestionToPhysicalPages(question, pageOffset) {
+  if (!pageOffset) return question;
+  return {
+    ...question,
+    startPage: question.startPage + pageOffset,
+    endPage: question.endPage + pageOffset,
+    blankPages: question.blankPages?.map((page) => page + pageOffset) ?? [],
+    ...(question.crop && {
+      crop: {
+        ...question.crop,
+        page: question.crop.page + pageOffset,
+      },
+    }),
+  };
 }
 
 const MCQ_START_RE =
@@ -1548,23 +1682,46 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
         isNcePaper,
         trimPeriodicTable: shouldTrimPeriodicTable,
       });
+      const nceWrittenStartPage = prepared.nceWrittenStart?.pageIndex != null
+        ? prepared.nceWrittenStart.pageIndex + 1
+        : null;
+      let pageOffset = prepared.pageOffset ?? 0;
       let { questions, extractionMeta } = splitWrittenPagesWithCrop(
         prepared.writtenPages,
-        prepared.writtenLayouts
+        prepared.writtenLayouts,
+        { allowedFirstQuestionNumbers: isNcePaper ? [1, 2] : [1] }
       );
+
+      if (questions.length === 0 && isNcePaper && prepared.nceWrittenStart) {
+        prepared = prepareWrittenPages(extracted.texts, extracted.layouts, {
+          isNcePaper,
+          trimPeriodicTable: shouldTrimPeriodicTable,
+          trimNceMcqSection: false,
+        });
+        pageOffset = prepared.pageOffset ?? 0;
+        ({ questions, extractionMeta } = splitWrittenPagesWithCrop(
+          prepared.writtenPages,
+          prepared.writtenLayouts,
+          { allowedFirstQuestionNumbers: [1] }
+        ));
+      }
 
       if (questions.length === 0 && shouldTrimPeriodicTable && prepared.trimmed.trimmed) {
         prepared = prepareWrittenPages(extracted.texts, extracted.layouts, {
           isNcePaper,
           trimPeriodicTable: false,
         });
+        pageOffset = prepared.pageOffset ?? 0;
         ({ questions, extractionMeta } = splitWrittenPagesWithCrop(
           prepared.writtenPages,
-          prepared.writtenLayouts
+          prepared.writtenLayouts,
+          { allowedFirstQuestionNumbers: isNcePaper ? [1, 2] : [1] }
         ));
       }
 
-      for (const q of questions) {
+      for (const rawQuestion of questions) {
+        const q = mapQuestionToPhysicalPages(rawQuestion, pageOffset);
+        if (isNcePaper && nceWrittenStartPage !== null && q.startPage < nceWrittenStartPage) continue;
         if (isLikelyMcqInstructionBlock(q.text)) continue;
 
         const key = `${url}||${q.number}`;
