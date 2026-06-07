@@ -40,6 +40,7 @@ const state = {
   debugMode: false,     // hidden developer details are created only when true
   debugClickCount: 0,
   lastDebugClickAt: 0,
+  renderedQuestionContexts: [],
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -137,6 +138,8 @@ function setDebugMode(enabled) {
   } else {
     clearPdfReport();
   }
+
+  syncAiAnalysisPanels();
 }
 
 function syncDebugLevelOption(enabled) {
@@ -1140,6 +1143,189 @@ function renderPdfWhenVisible(container, render) {
   observer.observe(container);
 }
 
+function syncAiAnalysisPanels() {
+  state.renderedQuestionContexts.forEach((context) => {
+    const existingPanel = context.card.querySelector(".ai-debug-details");
+    if (!state.debugMode) {
+      existingPanel?.remove();
+      return;
+    }
+
+    if (!existingPanel) {
+      addLazyAiAnalysisPanel(context);
+    }
+  });
+}
+
+function addLazyAiAnalysisPanel(context) {
+  const details = document.createElement("details");
+  details.className = "ai-debug-details";
+
+  const summary = document.createElement("summary");
+  summary.className = "ai-debug-summary";
+  summary.textContent = "AI analysis";
+  details.appendChild(summary);
+
+  details.addEventListener("toggle", () => {
+    if (!details.open || details.dataset.loaded) {
+      return;
+    }
+
+    details.dataset.loaded = "true";
+    details.appendChild(buildAiAnalysisBody(context));
+  });
+
+  const pagesSection = context.card.querySelector(".question-pages-section");
+  context.card.insertBefore(details, pagesSection);
+}
+
+function buildAiAnalysisBody({ question: q, pageLabel, startPage: sp, endPage: ep }) {
+  const debug = q.debugInfo || {};
+  const matchedLine = debug.matchedLine ?? "";
+  const topicScores = debug.topicScores ?? [];
+  const subParts = debug.subParts ?? [];
+  const extractionMode = debug.extractionMode ?? "bold";
+  const candidateHeadersFound = debug.candidateHeadersFound ?? 0;
+  const lowTextCoverage = debug.lowTextCoverage ?? false;
+  const avgCharsPerPage = debug.avgCharsPerPage ?? 0;
+  const cropInfo = q.crop || null;
+  const canRenderCrop = Boolean(cropInfo?.cropped && sp === ep);
+  const outputModeLabel = canRenderCrop
+    ? "Cropped question"
+    : cropInfo?.cropped
+      ? "Full source page (multi-page)"
+      : "Full source page";
+  const outputModeClass = canRenderCrop ? "ai-debug-crop-tag--cropped" : "ai-debug-crop-tag--full";
+
+  const assignedTopicId = q.topics[0] ?? "unclassified";
+  const assignedTopicScore = topicScores.find((ts) => ts.id === assignedTopicId);
+  const assignedLabel = assignedTopicScore?.label ?? assignedTopicId;
+  const assignedKeywords = assignedTopicScore?.matchedKeywords ?? [];
+
+  const topicScoreRows = topicScores
+    .filter((ts) => ts.score > 0 || (ts.hybridScore ?? 0) > 0)
+    .map((ts) => {
+      const hybrid = ts.hybridScore != null ? ts.hybridScore.toFixed(3) : "—";
+      const relatedness = ts.relatedness ?? "";
+      const relColour = relatedness === "related"
+        ? "var(--color-success)"
+        : relatedness === "borderline"
+          ? "var(--color-warn)"
+          : "var(--color-error)";
+      const relBadge = relatedness
+        ? `<span style="color:${relColour};font-weight:600">${escapeHtml(relatedness)}</span>`
+        : "";
+      return `<tr${ts.id === assignedTopicId ? ' class="ai-debug-assigned-row"' : ""}>
+        <td class="ai-debug-topic">${escapeHtml(ts.label)}</td>
+        <td class="ai-debug-score">${ts.score}</td>
+        <td class="ai-debug-score">${hybrid} ${relBadge}</td>
+        <td class="ai-debug-kw">${ts.matchedKeywords.map(renderKeywordBadge).join(" ")}</td>
+      </tr>`;
+    })
+    .join("");
+
+  const subPartsHtml = subParts.length > 0
+    ? subParts.map((part) => `<code class="ai-debug-subpart">(${escapeHtml(part)})</code>`).join(" ")
+    : `<span class="ai-debug-muted">none detected</span>`;
+
+  const modeColour = extractionMode === "bold"
+    ? "var(--color-success)"
+    : extractionMode === "geometric"
+      ? "var(--color-warn)"
+      : "var(--color-error)";
+  const modeBadge = `<span style="font-weight:600;color:${modeColour}">${escapeHtml(extractionMode)}</span>`;
+  const coverageBadge = lowTextCoverage
+    ? `<span style="color:var(--color-warn)">Low (${avgCharsPerPage} chars/page avg)</span>`
+    : `<span style="color:var(--color-success)">OK (${avgCharsPerPage} chars/page avg)</span>`;
+
+  const body = document.createElement("div");
+  body.className = "ai-debug-body";
+  body.innerHTML = `
+    <div class="ai-debug-row">
+      <span class="ai-debug-label">Source PDF</span>
+      <span class="ai-debug-value">${escapeHtml(q.pdfUrl.split("/").pop())}</span>
+    </div>
+    <div class="ai-debug-row">
+      <span class="ai-debug-label">Original question #</span>
+      <span class="ai-debug-value">${q.number}</span>
+    </div>
+    <div class="ai-debug-row">
+      <span class="ai-debug-label">Page range</span>
+      <span class="ai-debug-value">${pageLabel}</span>
+    </div>
+    <div class="ai-debug-row">
+      <span class="ai-debug-label">Detected start line</span>
+      <span class="ai-debug-value">
+        <code class="ai-debug-code">${escapeHtml(matchedLine)}</code>
+        <span class="ai-debug-muted"> (p. ${sp})</span>
+      </span>
+    </div>
+    <div class="ai-debug-row">
+      <span class="ai-debug-label">Extraction mode</span>
+      <span class="ai-debug-value">${modeBadge}
+        <span class="ai-debug-muted"> &mdash; ${candidateHeadersFound} candidate header(s) considered</span>
+      </span>
+    </div>
+    <div class="ai-debug-row">
+      <span class="ai-debug-label">Text coverage</span>
+      <span class="ai-debug-value">${coverageBadge}</span>
+    </div>
+    <div class="ai-debug-row">
+      <span class="ai-debug-label">Page output</span>
+      <span class="ai-debug-value">
+        <span class="ai-debug-crop-tag ${outputModeClass}">${outputModeLabel}</span>
+        ${
+          canRenderCrop
+            ? `<button type="button" class="btn-link source-preview-btn">View original page</button>`
+            : ""
+        }
+      </span>
+    </div>
+    <div class="source-preview-container" hidden></div>
+    <div class="ai-debug-row">
+      <span class="ai-debug-label">Sub-parts found</span>
+      <span class="ai-debug-value">${subPartsHtml}</span>
+    </div>
+    <div class="ai-debug-row ai-debug-row--assigned">
+      <span class="ai-debug-label">Assigned topic</span>
+      <span class="ai-debug-value">
+        <strong>${escapeHtml(assignedLabel)}</strong>
+        ${assignedKeywords.length > 0
+          ? `&mdash; triggered by: <span class="ai-debug-kw-inline">${assignedKeywords.map(renderKeywordBadge).join(" ")}</span>`
+          : `<span class="ai-debug-muted">(no keyword match &mdash; unclassified)</span>`}
+      </span>
+    </div>
+    ${
+      topicScoreRows
+        ? `<div class="ai-debug-row ai-debug-row--table">
+            <span class="ai-debug-label">All topic scores</span>
+            <table class="ai-debug-table">
+              <thead><tr><th>Topic</th><th>Kw score</th><th>Hybrid score</th><th>Matched keywords</th></tr></thead>
+              <tbody>${topicScoreRows}</tbody>
+            </table>
+          </div>`
+        : `<div class="ai-debug-row">
+            <span class="ai-debug-label">All topic scores</span>
+            <span class="ai-debug-value ai-debug-muted">No keywords matched &mdash; tagged as unclassified</span>
+          </div>`
+    }
+  `;
+
+  const previewButton = body.querySelector(".source-preview-btn");
+  const previewContainer = body.querySelector(".source-preview-container");
+  previewButton?.addEventListener("click", () => {
+    const isHidden = previewContainer.hidden;
+    previewContainer.hidden = !isHidden;
+    previewButton.textContent = isHidden ? "Hide original page" : "View original page";
+    if (isHidden && !previewContainer.dataset.loaded) {
+      previewContainer.dataset.loaded = "true";
+      renderPdfPages(previewContainer, q.pdfUrl, sp, sp, []);
+    }
+  });
+
+  return body;
+}
+
 function renderPaper(paper, seed) {
   if (state.paperType === "mcq") {
     renderMcqPaper(paper, seed);
@@ -1148,6 +1334,7 @@ function renderPaper(paper, seed) {
 
   const container = $("paper-container");
   container.innerHTML = "";
+  state.renderedQuestionContexts = [];
 
   const header = document.createElement("div");
   header.className = "paper-header";
@@ -1176,71 +1363,8 @@ function renderPaper(paper, seed) {
     const ep = q.endPage   ?? sp;
     const pageLabel = ep > sp ? `pp. ${sp}–${ep}` : `p. ${sp}`;
 
-    // Build AI debug rows for topic scores
-    const debug = q.debugInfo || {};
-    const matchedLine  = debug.matchedLine  ?? "";
-    const topicScores  = debug.topicScores  ?? [];
-    const subParts     = debug.subParts     ?? [];
-    const extractionMode        = debug.extractionMode        ?? "bold";
-    const candidateHeadersFound = debug.candidateHeadersFound ?? 0;
-    const lowTextCoverage       = debug.lowTextCoverage       ?? false;
-    const avgCharsPerPage       = debug.avgCharsPerPage       ?? 0;
     const cropInfo = q.crop || null;
     const canRenderCrop = Boolean(cropInfo?.cropped && sp === ep);
-    const outputModeLabel = canRenderCrop
-      ? "Cropped question"
-      : cropInfo?.cropped
-        ? "Full source page (multi-page)"
-        : "Full source page";
-    const outputModeClass = canRenderCrop ? "ai-debug-crop-tag--cropped" : "ai-debug-crop-tag--full";
-
-    // The single assigned topic for this question
-    const assignedTopicId = q.topics[0] ?? "unclassified";
-    const assignedTopicScore = topicScores.find((ts) => ts.id === assignedTopicId);
-    const assignedLabel = assignedTopicScore?.label ?? assignedTopicId;
-    const assignedKeywords = assignedTopicScore?.matchedKeywords ?? [];
-
-    const topicScoreRows = topicScores
-      .filter((ts) => ts.score > 0 || (ts.hybridScore ?? 0) > 0)
-      .map(
-        (ts) => {
-          const hybrid = ts.hybridScore != null
-            ? ts.hybridScore.toFixed(3)
-            : "—";
-          const relatedness = ts.relatedness ?? "";
-          const relColour = relatedness === "related"
-            ? "var(--color-success)"
-            : relatedness === "borderline"
-              ? "var(--color-warn)"
-              : "var(--color-error)";
-          const relBadge = relatedness
-            ? `<span style="color:${relColour};font-weight:600">${escapeHtml(relatedness)}</span>`
-            : "";
-          return `<tr${ts.id === assignedTopicId ? ' class="ai-debug-assigned-row"' : ""}>
-            <td class="ai-debug-topic">${escapeHtml(ts.label)}</td>
-            <td class="ai-debug-score">${ts.score}</td>
-            <td class="ai-debug-score">${hybrid} ${relBadge}</td>
-            <td class="ai-debug-kw">${ts.matchedKeywords.map(renderKeywordBadge).join(" ")}</td>
-          </tr>`;
-        }
-      )
-      .join("");
-
-    const subPartsHtml = subParts.length > 0
-      ? subParts.map((p) => `<code class="ai-debug-subpart">(${escapeHtml(p)})</code>`).join(" ")
-      : `<span class="ai-debug-muted">none detected</span>`;
-
-    // Render extraction-mode badge with colour coding.
-    const modeColour = extractionMode === "bold"
-      ? "var(--color-success)"
-      : extractionMode === "geometric"
-        ? "var(--color-warn)"
-        : "var(--color-error)";
-    const modeBadge = `<span style="font-weight:600;color:${modeColour}">${escapeHtml(extractionMode)}</span>`;
-
-    const coverageBadge = lowTextCoverage
-      ? `<span style="color:var(--color-warn)">⚠ low (${avgCharsPerPage} chars/page avg)</span>`
-      : `<span style="color:var(--color-success)">✓ ok (${avgCharsPerPage} chars/page avg)</span>`;
 
     div.innerHTML = `
       <div class="question-header">
@@ -1248,79 +1372,6 @@ function renderPaper(paper, seed) {
         <span class="question-topics">${topicBadges}</span>
         <span class="question-source" title="${q.pdfUrl}">${q.pdfUrl.split("/").pop()} — ${pageLabel}</span>
       </div>
-      <details class="ai-debug-details">
-        <summary class="ai-debug-summary">🤖 AI analysis</summary>
-        <div class="ai-debug-body">
-          <div class="ai-debug-row">
-            <span class="ai-debug-label">Source PDF</span>
-            <span class="ai-debug-value">${escapeHtml(q.pdfUrl.split("/").pop())}</span>
-          </div>
-          <div class="ai-debug-row">
-            <span class="ai-debug-label">Original question #</span>
-            <span class="ai-debug-value">${q.number}</span>
-          </div>
-          <div class="ai-debug-row">
-            <span class="ai-debug-label">Page range</span>
-            <span class="ai-debug-value">${pageLabel}</span>
-          </div>
-          <div class="ai-debug-row">
-            <span class="ai-debug-label">Detected start line</span>
-            <span class="ai-debug-value">
-              <code class="ai-debug-code">${escapeHtml(matchedLine)}</code>
-              <span class="ai-debug-muted"> (p. ${sp})</span>
-            </span>
-          </div>
-          <div class="ai-debug-row">
-            <span class="ai-debug-label">Extraction mode</span>
-            <span class="ai-debug-value">${modeBadge}
-              <span class="ai-debug-muted"> &mdash; ${candidateHeadersFound} candidate header(s) considered</span>
-            </span>
-          </div>
-          <div class="ai-debug-row">
-            <span class="ai-debug-label">Text coverage</span>
-            <span class="ai-debug-value">${coverageBadge}</span>
-          </div>
-          <div class="ai-debug-row">
-            <span class="ai-debug-label">Page output</span>
-            <span class="ai-debug-value">
-              <span class="ai-debug-crop-tag ${outputModeClass}">${outputModeLabel}</span>
-              ${
-                canRenderCrop
-                  ? `<button type="button" class="btn-link source-preview-btn" data-pdf-url="${escapeHtml(q.pdfUrl)}" data-page="${sp}">View original page</button>`
-                  : ""
-              }
-            </span>
-          </div>
-          <div class="source-preview-container" hidden></div>
-          <div class="ai-debug-row">
-            <span class="ai-debug-label">Sub-parts found</span>
-            <span class="ai-debug-value">${subPartsHtml}</span>
-          </div>
-          <div class="ai-debug-row ai-debug-row--assigned">
-            <span class="ai-debug-label">Assigned topic</span>
-            <span class="ai-debug-value">
-              <strong>${escapeHtml(assignedLabel)}</strong>
-              ${assignedKeywords.length > 0
-                ? `&mdash; triggered by: <span class="ai-debug-kw-inline">${assignedKeywords.map(renderKeywordBadge).join(" ")}</span>`
-                : `<span class="ai-debug-muted">(no keyword match — unclassified)</span>`}
-            </span>
-          </div>
-          ${
-            topicScoreRows
-              ? `<div class="ai-debug-row ai-debug-row--table">
-                  <span class="ai-debug-label">All topic scores</span>
-                  <table class="ai-debug-table">
-                    <thead><tr><th>Topic</th><th>Kw score</th><th>Hybrid score</th><th>Matched keywords</th></tr></thead>
-                    <tbody>${topicScoreRows}</tbody>
-                  </table>
-                </div>`
-              : `<div class="ai-debug-row">
-                  <span class="ai-debug-label">All topic scores</span>
-                  <span class="ai-debug-value ai-debug-muted">No keywords matched — tagged as unclassified</span>
-                </div>`
-          }
-        </div>
-      </details>
       <div class="question-pages-section">
         <div class="question-pages-container"></div>
       </div>
@@ -1329,17 +1380,17 @@ function renderPaper(paper, seed) {
     const pagesContainer = div.querySelector(".question-pages-container");
     container.appendChild(div);
 
-    const previewButton = div.querySelector(".source-preview-btn");
-    const previewContainer = div.querySelector(".source-preview-container");
-    previewButton?.addEventListener("click", () => {
-      const isHidden = previewContainer.hidden;
-      previewContainer.hidden = !isHidden;
-      previewButton.textContent = isHidden ? "Hide original page" : "View original page";
-      if (isHidden && !previewContainer.dataset.loaded) {
-        previewContainer.dataset.loaded = "true";
-        renderPdfPages(previewContainer, q.pdfUrl, sp, sp, []);
-      }
-    });
+    const context = {
+      card: div,
+      question: q,
+      pageLabel,
+      startPage: sp,
+      endPage: ep,
+    };
+    state.renderedQuestionContexts.push(context);
+    if (state.debugMode) {
+      addLazyAiAnalysisPanel(context);
+    }
 
     renderPdfWhenVisible(pagesContainer, () => {
       if (canRenderCrop) {
@@ -1354,6 +1405,7 @@ function renderPaper(paper, seed) {
 function renderMcqPaper(paper, seed) {
   const container = $("paper-container");
   container.innerHTML = "";
+  state.renderedQuestionContexts = [];
 
   const header = document.createElement("div");
   header.className = "paper-header";
