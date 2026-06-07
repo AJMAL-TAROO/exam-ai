@@ -6,6 +6,7 @@
 
 import assert from "node:assert/strict";
 import {
+  filterPageSpanOutliers,
   generateMcqPaper,
   generatePaper,
   getMcqQuestionPages,
@@ -571,6 +572,32 @@ test("mixed MCQ generation excludes unclassified questions", () => {
 
   assert.equal(paper.length, 1);
   assert.equal(paper[0].number, 1);
+});
+
+test("selected-topic generation excludes page-span leaks and uses clean replacements", () => {
+  const index = [
+    { pdfUrl: "a.pdf", number: 1, startPage: 1, endPage: 2, topics: ["motion"] },
+    { pdfUrl: "b.pdf", number: 1, startPage: 1, endPage: 2, topics: ["motion"] },
+    { pdfUrl: "c.pdf", number: 1, startPage: 1, endPage: 3, topics: ["motion"] },
+    { pdfUrl: "d.pdf", number: 1, startPage: 1, endPage: 3, topics: ["motion"] },
+    { pdfUrl: "leak-5.pdf", number: 1, startPage: 1, endPage: 5, topics: ["motion"] },
+    { pdfUrl: "leak-7.pdf", number: 1, startPage: 1, endPage: 7, topics: ["motion"] },
+  ];
+
+  const paper = generatePaper(index, { topics: ["motion"], count: 4, seed: 11 });
+
+  assert.equal(paper.length, 4);
+  assert.ok(paper.every((question) => !question.pdfUrl.startsWith("leak-")));
+});
+
+test("page-span outlier filtering waits for enough comparable candidates", () => {
+  const smallPool = [
+    { startPage: 1, endPage: 2 },
+    { startPage: 1, endPage: 2 },
+    { startPage: 1, endPage: 7 },
+  ];
+
+  assert.equal(filterPageSpanOutliers(smallPool).length, 3);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

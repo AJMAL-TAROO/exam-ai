@@ -152,7 +152,6 @@ function syncDebugLevelOption(enabled) {
     option.value = "nce";
     option.textContent = "NCE (Mauritius)";
     levelSelect.appendChild(option);
-    return;
   }
 
   if (!enabled && existingOption) {
@@ -162,6 +161,8 @@ function syncDebugLevelOption(enabled) {
     }
     existingOption.remove();
   }
+
+  renderLevelDropdown();
 }
 
 function setWorkflowEnabled(enabled) {
@@ -182,6 +183,47 @@ function setWorkflowEnabled(enabled) {
     .forEach((input) => {
       input.disabled = !enabled;
     });
+
+  renderLevelDropdown();
+}
+
+function setLevelDropdownOpen(open) {
+  const trigger = $("level-select-trigger");
+  const menu = $("level-select-menu");
+  if (!trigger || !menu) return;
+
+  const shouldOpen = open && !trigger.disabled;
+  trigger.setAttribute("aria-expanded", String(shouldOpen));
+  menu.hidden = !shouldOpen;
+}
+
+function renderLevelDropdown() {
+  const select = $("level-select");
+  const trigger = $("level-select-trigger");
+  const value = $("level-select-value");
+  const menu = $("level-select-menu");
+  if (!select || !trigger || !value || !menu) return;
+
+  trigger.disabled = select.disabled;
+  value.textContent = select.selectedOptions[0]?.textContent || "- choose level -";
+  menu.replaceChildren();
+
+  [...select.options].forEach((option) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "custom-select__option";
+    button.textContent = option.textContent;
+    button.dataset.value = option.value;
+    button.setAttribute("role", "option");
+    button.setAttribute("aria-selected", String(option.value === select.value));
+    button.addEventListener("click", () => {
+      select.value = option.value;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      setLevelDropdownOpen(false);
+      trigger.focus();
+    });
+    menu.appendChild(button);
+  });
 }
 
 function getSessionToken() {
@@ -1659,6 +1701,20 @@ function init() {
   setWorkflowEnabled(false);
 
   $("exam-ai-title").addEventListener("click", onDebugTriggerClick);
+  $("level-select-trigger").addEventListener("click", () => {
+    const isOpen = $("level-select-trigger").getAttribute("aria-expanded") === "true";
+    setLevelDropdownOpen(!isOpen);
+  });
+  document.addEventListener("click", (event) => {
+    if (!$("level-select-control").contains(event.target)) {
+      setLevelDropdownOpen(false);
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      setLevelDropdownOpen(false);
+    }
+  });
   const pdfReportMediaQuery = window.matchMedia("(max-width: 640px)");
   if (typeof pdfReportMediaQuery.addEventListener === "function") {
     pdfReportMediaQuery.addEventListener("change", onPdfReportLayoutChange);
@@ -1667,7 +1723,10 @@ function init() {
   }
 
   // Wire up level + subject
-  $("level-select").addEventListener("change", onLevelChange);
+  $("level-select").addEventListener("change", (event) => {
+    renderLevelDropdown();
+    onLevelChange(event);
+  });
   $("subject-select").addEventListener("change", onSubjectChange);
 
   // Scan

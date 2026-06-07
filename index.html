@@ -62,14 +62,28 @@
         </div>
       </div>
       <div class="field-grid">
-        <label>
+        <div class="field-control">
           <span>Qualification level</span>
-          <select id="level-select">
+          <div class="custom-select" id="level-select-control">
+            <button
+              type="button"
+              class="custom-select__trigger"
+              id="level-select-trigger"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-controls="level-select-menu"
+            >
+              <span id="level-select-value">- choose level -</span>
+              <span class="custom-select__chevron" aria-hidden="true"></span>
+            </button>
+            <div class="custom-select__menu" id="level-select-menu" role="listbox" hidden></div>
+          </div>
+          <select id="level-select" hidden tabindex="-1" aria-hidden="true">
             <option value="">- choose level -</option>
             <option value="o-level">O Level (IGCSE / O Level)</option>
             <option value="a-level">A Level (AS &amp; A Level)</option>
           </select>
-        </label>
+        </div>
       </div>
     </section>
 

@@ -1877,6 +1877,44 @@ export function seededShuffle(array, seed) {
 
 // ─── Paper generation ─────────────────────────────────────────────────────────
 
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1] + sorted[middle]) / 2
+    : sorted[middle];
+}
+
+function questionPageSpan(question) {
+  const startPage = Number(question.startPage ?? question.page ?? 1);
+  const endPage = Number(question.endPage ?? question.page ?? startPage);
+  if (!Number.isFinite(startPage) || !Number.isFinite(endPage)) return 1;
+  return Math.max(1, Math.floor(endPage) - Math.floor(startPage) + 1);
+}
+
+/**
+ * Remove likely extraction leaks whose page span is abnormally large compared
+ * with the other candidates for the same selected chapter/topic pool.
+ *
+ * The median and median absolute deviation keep the limit stable even when the
+ * pool already contains one or two severe leaks. At least four candidates are
+ * required before an outlier decision is made.
+ *
+ * @param {QuestionEntry[]} pool
+ * @returns {QuestionEntry[]}
+ */
+export function filterPageSpanOutliers(pool) {
+  if (pool.length < 4) return pool;
+
+  const spans = pool.map(questionPageSpan);
+  const typicalSpan = median(spans);
+  const deviation = median(spans.map((span) => Math.abs(span - typicalSpan)));
+  const rejectionThreshold = typicalSpan + Math.max(2, deviation * 2);
+  const filtered = pool.filter((question) => questionPageSpan(question) < rejectionThreshold);
+
+  return filtered.length > 0 ? filtered : pool;
+}
+
 /**
  * Generate a randomized exam paper.
  *
@@ -1904,6 +1942,10 @@ export function generatePaper(index, { topics = null, count = 10, seed = null })
     seen.add(key);
     return true;
   });
+
+  if (topics && topics.length > 0) {
+    pool = filterPageSpanOutliers(pool);
+  }
 
   if (pool.length === 0) return [];
 
