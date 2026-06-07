@@ -34,20 +34,24 @@ export async function loadExamAiContext(sessionToken) {
     throw new Error("Missing Exam AI session. Open Exam AI from TAW.");
   }
 
-  const config = await loadConfig();
-  const session = await loadValidSession(sessionToken);
+  const [config, session] = await Promise.all([
+    loadConfig(),
+    loadValidSession(sessionToken),
+  ]);
   const adminKey = cleanText(session.ADMIN_KEY);
 
   if (!adminKey) {
     throw new Error("Invalid Exam AI session. Open Exam AI from TAW again.");
   }
 
-  const adminData = await firebaseGet(`ADMIN/${adminKey}`);
+  const [adminData, plan] = await Promise.all([
+    firebaseGet(`ADMIN/${adminKey}`),
+    ensureTutorPlan(adminKey, config),
+  ]);
   if (!adminData || typeof adminData !== "object") {
     throw new Error("Tutor profile was not found in Firebase.");
   }
 
-  const plan = await ensureTutorPlan(adminKey, config);
   const credit = await ensureCurrentMonthCredit(adminKey, plan, config);
   const allowedSubjects = mapTutorSubjects(adminData.SUBJECTS, config.SUBJECT_MAP);
 
