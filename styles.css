@@ -93,6 +93,10 @@ h1 {
   line-height: 1.2;
 }
 
+#exam-ai-title {
+  user-select: none;
+}
+
 h2 {
   margin-bottom: 2px;
   font-size: 1rem;
@@ -134,7 +138,7 @@ h3 {
 
 .summary-band {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
 }
 

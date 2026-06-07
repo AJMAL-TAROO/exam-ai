@@ -1610,6 +1610,11 @@ export function tagTopicsDebug(questionText, topics) {
   return { topicScores, subParts };
 }
 
+function assignedTopicsFromScores(topicScores) {
+  const bestMatch = topicScores.find((topic) => topic.relatedness !== "not_related");
+  return [bestMatch?.id ?? "unclassified"];
+}
+
 // ─── Question index ───────────────────────────────────────────────────────────
 
 /**
@@ -1732,7 +1737,7 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
           pdfUrl: url,
           number: q.number,
           text: q.text,
-          topics: tagTopics(q.text, topics),
+          topics: assignedTopicsFromScores(debugResult.topicScores),
           startPage: q.startPage,
           endPage:   q.endPage,
           ...(q.crop && { crop: q.crop }),
@@ -1811,7 +1816,7 @@ export async function buildMcqIndex(pdfUrls, topics, onProgress) {
           stem: q.stem,
           options: q.options,
           text: q.text,
-          topics: tagTopics(q.text, topics),
+          topics: assignedTopicsFromScores(debugResult.topicScores),
           startPage: q.page,
           endPage: q.page,
           page: q.page,

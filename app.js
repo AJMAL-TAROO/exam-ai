@@ -37,12 +37,17 @@ const state = {
   topics: [],           // current topic list
   examContext: null,    // Firebase session, tutor, plan, and credit context
   allowedSubjects: [],  // tutor subjects mapped to manifest keys
+  debugMode: false,     // hidden developer details are created only when true
+  debugClickCount: 0,
+  lastDebugClickAt: 0,
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /** Maximum characters shown in the question preview inside the index report. */
 const MAX_PREVIEW_LENGTH = 120;
+const DEBUG_CLICK_TARGET = 5;
+const DEBUG_CLICK_WINDOW_MS = 3000;
 
 const SUBJECT_LABELS = {
   maths: "Mathematics",
@@ -94,6 +99,66 @@ function setLoading(buttonId, loading) {
   btn.disabled = loading;
   btn.dataset.originalText = btn.dataset.originalText || btn.textContent;
   btn.textContent = loading ? btn.dataset.loadingText || "Working…" : btn.dataset.originalText;
+}
+
+function onDebugTriggerClick() {
+  if (state.debugMode) {
+    setDebugMode(false);
+    return;
+  }
+
+  const now = Date.now();
+  if (now - state.lastDebugClickAt > DEBUG_CLICK_WINDOW_MS) {
+    state.debugClickCount = 0;
+  }
+
+  state.lastDebugClickAt = now;
+  state.debugClickCount += 1;
+
+  if (state.debugClickCount >= DEBUG_CLICK_TARGET) {
+    setDebugMode(true);
+  }
+}
+
+function setDebugMode(enabled) {
+  state.debugMode = enabled;
+  state.debugClickCount = 0;
+  state.lastDebugClickAt = 0;
+
+  const planSummary = $("plan-summary");
+  if (planSummary) {
+    planSummary.hidden = !enabled;
+  }
+
+  syncDebugLevelOption(enabled);
+
+  if (enabled && state.questionIndex.length > 0) {
+    renderPdfReport();
+  } else {
+    clearPdfReport();
+  }
+}
+
+function syncDebugLevelOption(enabled) {
+  const levelSelect = $("level-select");
+  if (!levelSelect) return;
+
+  const existingOption = levelSelect.querySelector('option[value="nce"]');
+  if (enabled && !existingOption) {
+    const option = document.createElement("option");
+    option.value = "nce";
+    option.textContent = "NCE (Mauritius)";
+    levelSelect.appendChild(option);
+    return;
+  }
+
+  if (!enabled && existingOption) {
+    if (levelSelect.value === "nce") {
+      levelSelect.value = "";
+      levelSelect.dispatchEvent(new Event("change"));
+    }
+    existingOption.remove();
+  }
 }
 
 function setWorkflowEnabled(enabled) {
@@ -378,9 +443,12 @@ async function bootstrapExamAiSession() {
   setSessionStatus("Checking TAW session...");
 
   try {
-    state.examContext = await loadExamAiContext(getSessionToken());
+    const [examContext] = await Promise.all([
+      loadExamAiContext(getSessionToken()),
+      loadManifest(),
+    ]);
+    state.examContext = examContext;
     state.allowedSubjects = state.examContext.allowedSubjects;
-    await loadManifest();
     updateContextPanel();
     setSessionStatus("Connected to TAW.", "success");
     setWorkflowEnabled(true);
@@ -650,9 +718,7 @@ async function onBuildIndexClick() {
   hideSection("paper-section");
 
   // Clear previous report
-  const reportEl = $("pdf-report");
-  reportEl.innerHTML = "";
-  reportEl.hidden = true;
+  clearPdfReport();
 
   state.topics = getTopics();
   state.questionIndex = [];
@@ -677,7 +743,11 @@ async function onBuildIndexClick() {
         "success"
       );
       buildTopicCheckboxes();
-      renderPdfReport();
+      if (state.debugMode) {
+        renderPdfReport();
+      } else {
+        clearPdfReport();
+      }
       showSection("generate-section");
     }
   } catch (err) {
@@ -693,11 +763,23 @@ async function onBuildIndexClick() {
 function resetPdfSelectorAndReport() {
   const selectorEl = $("pdf-selector");
   const listEl = $("pdf-checkbox-list");
-  const reportEl = $("pdf-report");
   if (selectorEl) selectorEl.hidden = true;
   if (listEl) listEl.innerHTML = "";
-  if (reportEl) { reportEl.innerHTML = ""; reportEl.hidden = true; }
+  clearPdfReport();
   state.selectedPdfUrls = [];
+}
+
+function clearPdfReport() {
+  const reportEl = $("pdf-report");
+  if (!reportEl) return;
+  reportEl.replaceChildren();
+  reportEl.hidden = true;
+}
+
+function onPdfReportLayoutChange() {
+  if (state.debugMode && state.questionIndex.length > 0) {
+    renderPdfReport();
+  }
 }
 
 /**
@@ -732,8 +814,13 @@ function renderPdfSelector() {
  * same data is rendered as stacked cards (CSS toggles which is visible).
  */
 function renderPdfReport() {
+  if (!state.debugMode) {
+    clearPdfReport();
+    return;
+  }
+
   const reportEl = $("pdf-report");
-  reportEl.innerHTML = "";
+  reportEl.replaceChildren();
 
   // Build a lookup map: url → questions[]
   const byPdf = new Map();
@@ -751,6 +838,7 @@ function renderPdfReport() {
   heading.style.cssText = "margin:0 0 0.75rem; font-size:0.95rem; font-weight:600;";
   heading.textContent = "Per-PDF Summary";
   reportEl.appendChild(heading);
+  const useMobileCards = window.matchMedia("(max-width: 640px)").matches;
 
   state.selectedPdfUrls.forEach((url) => {
     const questions = byPdf.get(url) || [];
@@ -795,6 +883,7 @@ function renderPdfReport() {
       });
 
       // ── Desktop: standard HTML table ──────────────────────────────────────
+      if (!useMobileCards) {
       const table = document.createElement("table");
       table.className = "pdf-topic-table";
 
@@ -825,8 +914,10 @@ function renderPdfReport() {
       table.appendChild(thead);
       table.appendChild(tbody);
       entry.appendChild(table);
+      }
 
       // ── Mobile: stacked cards (one card per question) ──────────────────────
+      if (useMobileCards) {
       const cardList = document.createElement("div");
       cardList.className = "pdf-report-cards";
 
@@ -859,6 +950,7 @@ function renderPdfReport() {
       });
 
       entry.appendChild(cardList);
+      }
     }
 
     reportEl.appendChild(entry);
@@ -1026,6 +1118,27 @@ async function onGenerateClick() {
 }
 
 // ─── Step 7: Render paper ─────────────────────────────────────────────────────
+
+function renderPdfWhenVisible(container, render) {
+  container.innerHTML = '<span class="page-loading">Page preview loads when it comes into view.</span>';
+
+  if (!("IntersectionObserver" in window)) {
+    render();
+    return;
+  }
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) {
+        return;
+      }
+      observer.disconnect();
+      render();
+    },
+    { rootMargin: "900px 0px" }
+  );
+  observer.observe(container);
+}
 
 function renderPaper(paper, seed) {
   if (state.paperType === "mcq") {
@@ -1213,26 +1326,28 @@ function renderPaper(paper, seed) {
       </div>
     `;
 
-    // Render pages immediately — no toggle needed; canvas is the primary view.
     const pagesContainer = div.querySelector(".question-pages-container");
-    if (canRenderCrop) {
-      renderPdfCrop(pagesContainer, q.pdfUrl, cropInfo);
-      const previewButton = div.querySelector(".source-preview-btn");
-      const previewContainer = div.querySelector(".source-preview-container");
-      previewButton?.addEventListener("click", () => {
-        const isHidden = previewContainer.hidden;
-        previewContainer.hidden = !isHidden;
-        previewButton.textContent = isHidden ? "Hide original page" : "View original page";
-        if (isHidden && !previewContainer.dataset.loaded) {
-          previewContainer.dataset.loaded = "true";
-          renderPdfPages(previewContainer, q.pdfUrl, sp, sp, []);
-        }
-      });
-    } else {
-      renderPdfPages(pagesContainer, q.pdfUrl, sp, ep, q.blankPages ?? []);
-    }
-
     container.appendChild(div);
+
+    const previewButton = div.querySelector(".source-preview-btn");
+    const previewContainer = div.querySelector(".source-preview-container");
+    previewButton?.addEventListener("click", () => {
+      const isHidden = previewContainer.hidden;
+      previewContainer.hidden = !isHidden;
+      previewButton.textContent = isHidden ? "Hide original page" : "View original page";
+      if (isHidden && !previewContainer.dataset.loaded) {
+        previewContainer.dataset.loaded = "true";
+        renderPdfPages(previewContainer, q.pdfUrl, sp, sp, []);
+      }
+    });
+
+    renderPdfWhenVisible(pagesContainer, () => {
+      if (canRenderCrop) {
+        renderPdfCrop(pagesContainer, q.pdfUrl, cropInfo);
+      } else {
+        renderPdfPages(pagesContainer, q.pdfUrl, sp, ep, q.blankPages ?? []);
+      }
+    });
   });
 }
 
@@ -1490,6 +1605,14 @@ function onDownloadClick() {
 
 function init() {
   setWorkflowEnabled(false);
+
+  $("exam-ai-title").addEventListener("click", onDebugTriggerClick);
+  const pdfReportMediaQuery = window.matchMedia("(max-width: 640px)");
+  if (typeof pdfReportMediaQuery.addEventListener === "function") {
+    pdfReportMediaQuery.addEventListener("change", onPdfReportLayoutChange);
+  } else {
+    pdfReportMediaQuery.addListener(onPdfReportLayoutChange);
+  }
 
   // Wire up level + subject
   $("level-select").addEventListener("change", onLevelChange);
