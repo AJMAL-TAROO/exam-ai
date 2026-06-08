@@ -215,10 +215,18 @@ h3 {
   margin-bottom: 16px;
 }
 
-#level-section {
+#level-section,
+#subject-section {
   position: relative;
-  z-index: 20;
   overflow: visible;
+}
+
+#level-section {
+  z-index: 20;
+}
+
+#subject-section {
+  z-index: 19;
 }
 
 label,

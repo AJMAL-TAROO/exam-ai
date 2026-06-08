@@ -185,6 +185,7 @@ function setWorkflowEnabled(enabled) {
     });
 
   renderLevelDropdown();
+  renderSubjectDropdown();
 }
 
 function setLevelDropdownOpen(open) {
@@ -220,6 +221,45 @@ function renderLevelDropdown() {
       select.value = option.value;
       select.dispatchEvent(new Event("change", { bubbles: true }));
       setLevelDropdownOpen(false);
+      trigger.focus();
+    });
+    menu.appendChild(button);
+  });
+}
+
+function setSubjectDropdownOpen(open) {
+  const trigger = $("subject-select-trigger");
+  const menu = $("subject-select-menu");
+  if (!trigger || !menu) return;
+
+  const shouldOpen = open && !trigger.disabled;
+  trigger.setAttribute("aria-expanded", String(shouldOpen));
+  menu.hidden = !shouldOpen;
+}
+
+function renderSubjectDropdown() {
+  const select = $("subject-select");
+  const trigger = $("subject-select-trigger");
+  const value = $("subject-select-value");
+  const menu = $("subject-select-menu");
+  if (!select || !trigger || !value || !menu) return;
+
+  trigger.disabled = select.disabled;
+  value.textContent = select.selectedOptions[0]?.textContent || "- choose subject -";
+  menu.replaceChildren();
+
+  [...select.options].forEach((option) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "custom-select__option";
+    button.textContent = option.textContent;
+    button.dataset.value = option.value;
+    button.setAttribute("role", "option");
+    button.setAttribute("aria-selected", String(option.value === select.value));
+    button.addEventListener("click", () => {
+      select.value = option.value;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      setSubjectDropdownOpen(false);
       trigger.focus();
     });
     menu.appendChild(button);
@@ -441,6 +481,7 @@ function populateSubjectOptions(levelKey, manifest) {
     option.textContent = subject.label;
     subjectSelect.appendChild(option);
   });
+  renderSubjectDropdown();
 
   if (subjects.length === 0) {
     setStatus(
@@ -524,6 +565,7 @@ async function onLevelChange(e) {
   // Reset subject selector
   const subjectSelect = $("subject-select");
   subjectSelect.innerHTML = '<option value="">- choose subject -</option>';
+  renderSubjectDropdown();
   setStatus("subject", "");
 
   $("paper-number-options").innerHTML = "";
@@ -1703,16 +1745,26 @@ function init() {
   $("exam-ai-title").addEventListener("click", onDebugTriggerClick);
   $("level-select-trigger").addEventListener("click", () => {
     const isOpen = $("level-select-trigger").getAttribute("aria-expanded") === "true";
+    setSubjectDropdownOpen(false);
     setLevelDropdownOpen(!isOpen);
+  });
+  $("subject-select-trigger").addEventListener("click", () => {
+    const isOpen = $("subject-select-trigger").getAttribute("aria-expanded") === "true";
+    setLevelDropdownOpen(false);
+    setSubjectDropdownOpen(!isOpen);
   });
   document.addEventListener("click", (event) => {
     if (!$("level-select-control").contains(event.target)) {
       setLevelDropdownOpen(false);
     }
+    if (!$("subject-select-control").contains(event.target)) {
+      setSubjectDropdownOpen(false);
+    }
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       setLevelDropdownOpen(false);
+      setSubjectDropdownOpen(false);
     }
   });
   const pdfReportMediaQuery = window.matchMedia("(max-width: 640px)");
@@ -1727,7 +1779,10 @@ function init() {
     renderLevelDropdown();
     onLevelChange(event);
   });
-  $("subject-select").addEventListener("change", onSubjectChange);
+  $("subject-select").addEventListener("change", (event) => {
+    renderSubjectDropdown();
+    onSubjectChange(event);
+  });
 
   // Scan
   $("scan-btn").addEventListener("click", onLoadFilesClick);

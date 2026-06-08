@@ -96,12 +96,26 @@
         </div>
       </div>
       <div class="field-grid">
-        <label>
+        <div class="field-control">
           <span>Subject</span>
-          <select id="subject-select">
+          <div class="custom-select" id="subject-select-control">
+            <button
+              type="button"
+              class="custom-select__trigger"
+              id="subject-select-trigger"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-controls="subject-select-menu"
+            >
+              <span id="subject-select-value">- choose subject -</span>
+              <span class="custom-select__chevron" aria-hidden="true"></span>
+            </button>
+            <div class="custom-select__menu" id="subject-select-menu" role="listbox" hidden></div>
+          </div>
+          <select id="subject-select" hidden tabindex="-1" aria-hidden="true">
             <option value="">- choose subject -</option>
           </select>
-        </label>
+        </div>
       </div>
       <div id="subject-status" class="status status--info" hidden></div>
     </section>
