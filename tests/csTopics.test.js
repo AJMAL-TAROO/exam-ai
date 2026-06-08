@@ -8,7 +8,9 @@
  */
 
 import assert from "node:assert/strict";
+import { tagTopicsDebug } from "../core.js";
 import { TOPICS_A } from "../subjects/topics-a.js";
+import { TOPICS_O } from "../subjects/topics-o.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -198,6 +200,46 @@ test('"truth table for AND gate" scores Chapter 3 via "AND gate"', () => {
     hits.some((kw) => kw.toLowerCase() === "and gate"),
     `Technical snippet did not match "AND gate" in Chapter 3 keywords (hits: ${hits.join(", ")})`
   );
+});
+
+// ─── Database context disambiguation ─────────────────────────────────────────
+
+console.log("\nDatabase context disambiguation");
+
+function topicScore(question, topics, topicId) {
+  return tagTopicsDebug(question, topics).topicScores.find((topic) => topic.id === topicId);
+}
+
+test('plain-English "where" and "having" do not score A Level databases', () => {
+  const question = "State where the operating system is stored and explain why having more RAM improves performance.";
+  const database = topicScore(question, csTopics, "ch08-databases");
+
+  assert.equal(database.score, 0);
+  assert.equal(database.tfidfScore, 0);
+});
+
+test('"fill in the table" does not score O Level databases', () => {
+  const question = "Complete the table to show the outputs from each logic gate.";
+  const database = topicScore(question, TOPICS_O["computer-science"], "databases");
+
+  assert.equal(database.score, 0);
+  assert.equal(database.tfidfScore, 0);
+});
+
+test('"electrostatic field" does not score O Level databases', () => {
+  const question = "A touchscreen detects a change in the electrostatic field when the user touches the screen.";
+  const database = topicScore(question, TOPICS_O["computer-science"], "databases");
+
+  assert.equal(database.score, 0);
+  assert.equal(database.tfidfScore, 0);
+});
+
+test("lowercase SQL syntax still scores A Level databases", () => {
+  const question = "Write an sql query to select name from student where grade > 5 having count(id) > 1.";
+  const database = topicScore(question, csTopics, "ch08-databases");
+
+  assert.ok(database.score > 0);
+  assert.ok(database.matchedKeywords.some((match) => match.kw.toLowerCase() === "where"));
 });
 
 // ─── Summary ──────────────────────────────────────────────────────────────────

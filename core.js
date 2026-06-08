@@ -1499,6 +1499,66 @@ function normalizeInstructionWordsForScoring(text) {
   return text.replace(/\bcircle\s+(?=all|the|each|any|your|correct|only|every)\b/gi, "");
 }
 
+const DATABASE_TOPIC_IDS = new Set(["databases", "ch08-databases"]);
+
+// These words are meaningful in database questions, but are also common in
+// ordinary English, programming, diagrams, and other science topics.
+const DATABASE_CONTEXTUAL_KEYWORDS = new Set([
+  "where", "having", "table", "record", "field", "index", "query",
+  "select", "from", "join", "count", "sum", "avg", "max", "min",
+  "insert", "update", "delete", "validation", "verification", "data type",
+  "relationship", "entity", "attribute", "transaction", "consistency",
+]);
+
+/**
+ * Database context must come from a database-specific phrase or recognizable
+ * SQL syntax. Capitalization is deliberately ignored: a lowercase SQL query is
+ * valid, while uppercase words in prose are not automatically SQL.
+ */
+function hasDatabaseContext(text) {
+  const normalized = normalizeForMatch(text.toLowerCase()).replace(/\s+/g, " ");
+  const databaseAnchors = [
+    /\bdatabase\b/,
+    /\bdbms\b/,
+    /\brelational\b/,
+    /\bprimary\s+key\b/,
+    /\bforeign\s+key\b/,
+    /\breferential\s+integrity\b/,
+    /\bentity\s+relationship\b/,
+    /\berd\b/,
+    /\bnormal(?:ization|isation)\b/,
+    /\b(?:first|second|third)\s+normal\s+form\b/,
+    /\b[123]nf\b/,
+    /\bfunctional\s+dependency\b/,
+    /\bdata\s+(?:redundancy|inconsistency|anomaly)\b/,
+    /\bflat\s+file\b/,
+    /\bsql\b/,
+    /\bacid\b/,
+  ];
+  const sqlSyntax = [
+    /\bselect\b[\s\S]{0,120}\bfrom\b/,
+    /\binsert\s+into\b/,
+    /\bupdate\b[\s\S]{0,80}\bset\b/,
+    /\bdelete\s+from\b/,
+    /\b(?:create|alter|drop)\s+table\b/,
+    /\b(?:inner|left|right|full)\s+join\b/,
+    /\bgroup\s+by\b/,
+    /\border\s+by\b/,
+  ];
+  return [...databaseAnchors, ...sqlSyntax].some((pattern) => pattern.test(normalized));
+}
+
+function contextualKeywordsForTopic(topic, questionText) {
+  const keywords = Array.isArray(topic.keywords) ? topic.keywords : [];
+  if (!DATABASE_TOPIC_IDS.has(topic.id) || hasDatabaseContext(questionText)) {
+    return keywords;
+  }
+
+  return keywords.filter(
+    (keyword) => !DATABASE_CONTEXTUAL_KEYWORDS.has(keyword.toLowerCase()),
+  );
+}
+
 /**
  * Score a question against each topic.
  *
@@ -1530,7 +1590,7 @@ function scoreTopics(questionText, topics) {
     const matchedKeywords = [];
     let score = 0;
 
-    for (const kw of topic.keywords) {
+    for (const kw of contextualKeywordsForTopic(topic, scoringText)) {
       const kwLower    = kw.toLowerCase();
       const baseWeight = kw.includes(" ") ? MULTI_WORD_WEIGHT : SINGLE_WORD_WEIGHT;
 
@@ -1560,18 +1620,40 @@ function scoreTopics(questionText, topics) {
  */
 function scoreTopicsHybrid(questionText, topics) {
   const scoringText = normalizeInstructionWordsForScoring(questionText);
+  const databaseContextPresent = hasDatabaseContext(scoringText);
+  const contextualTopics = topics.map((topic) => ({
+    ...topic,
+    keywords: contextualKeywordsForTopic(topic, scoringText),
+  }));
   // Build a lookup so keywords can be re-attached after the scoring pass.
-  const keywordsById = Object.fromEntries(topics.map((t) => [t.id, Array.isArray(t.keywords) ? t.keywords : []]));
+  const keywordsById = Object.fromEntries(
+    contextualTopics.map((topic) => [topic.id, topic.keywords]),
+  );
 
   // scoreTopics() returns objects without the keywords field; merge them back
   // so that augmentWithHybridScores() can compute TF-IDF against each topic's
   // keyword list without throwing on topic.keywords.join().
-  const keywordScored = scoreTopics(scoringText, topics).map((scored) => ({
+  const keywordScored = scoreTopics(scoringText, contextualTopics).map((scored) => ({
     ...scored,
     keywords: Array.isArray(keywordsById[scored.id]) ? keywordsById[scored.id] : [],
   }));
 
   return augmentWithHybridScores(scoringText, keywordScored)
+    .map((topic) => {
+      if (!DATABASE_TOPIC_IDS.has(topic.id) || databaseContextPresent) {
+        return topic;
+      }
+
+      return {
+        ...topic,
+        score: 0,
+        matchedKeywords: [],
+        hybridScore: 0,
+        tfidfScore: 0,
+        kwNormScore: 0,
+        relatedness: "not_related",
+      };
+    })
     .sort((a, b) => b.hybridScore - a.hybridScore);
 }
 
