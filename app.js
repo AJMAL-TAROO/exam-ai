@@ -19,7 +19,9 @@ import { buildPaperPath } from "./pathUtils.js";
 import {
   consumeExamAiCredit,
   loadExamAiContext,
+  loadTutorClassrooms,
   refreshCurrentMonthCredit,
+  uploadGeneratedPaperToClassroom,
 } from "./firebaseBackend.js";
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -41,6 +43,8 @@ const state = {
   debugClickCount: 0,
   lastDebugClickAt: 0,
   renderedQuestionContexts: [],
+  generatedPaper: null,
+  generatedPdf: null,
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -92,6 +96,20 @@ function showSection(id) {
 
 function hideSection(id) {
   $(id).hidden = true;
+}
+
+function clearGeneratedPaper() {
+  state.generatedPaper = null;
+  state.generatedPdf = null;
+  setPaperActionStatus("");
+}
+
+function setPaperActionStatus(message, type = "info") {
+  const el = $("paper-action-status");
+  if (!el) return;
+  el.textContent = message;
+  el.className = `status status--${type}`;
+  el.hidden = !message;
 }
 
 function setLoading(buttonId, loading) {
@@ -172,7 +190,9 @@ function setWorkflowEnabled(enabled) {
     "scan-btn",
     "build-index-btn",
     "generate-btn",
+    "preview-btn",
     "download-btn",
+    "upload-classroom-btn",
   ].forEach((id) => {
     const el = $(id);
     if (el) el.disabled = !enabled;
@@ -371,6 +391,7 @@ function resetDownstreamFromPaperType() {
   hideSection("index-section");
   hideSection("generate-section");
   hideSection("paper-section");
+  clearGeneratedPaper();
   resetPdfSelectorAndReport();
 }
 
@@ -580,6 +601,7 @@ async function onLevelChange(e) {
   hideSection("index-section");
   hideSection("generate-section");
   hideSection("paper-section");
+  clearGeneratedPaper();
 
   // Clear PDF selector + report
   resetPdfSelectorAndReport();
@@ -612,6 +634,7 @@ async function onSubjectChange(e) {
   hideSection("index-section");
   hideSection("generate-section");
   hideSection("paper-section");
+  clearGeneratedPaper();
 
   // Clear PDF selector + report
   resetPdfSelectorAndReport();
@@ -673,6 +696,7 @@ function onPaperChange(e) {
   hideSection("index-section");
   hideSection("generate-section");
   hideSection("paper-section");
+  clearGeneratedPaper();
 
   // Clear PDF selector + report
   resetPdfSelectorAndReport();
@@ -803,6 +827,7 @@ async function onBuildIndexClick() {
   setStatus("index", "Building question index…");
   hideSection("generate-section");
   hideSection("paper-section");
+  clearGeneratedPaper();
 
   // Clear previous report
   clearPdfReport();
@@ -1162,6 +1187,13 @@ async function onGenerateClick() {
       `Generated ${paper.length} question(s). ${updatedCredit.remaining}/${updatedCredit.limit} credits left.`,
       "success"
     );
+    clearGeneratedPaper();
+    state.generatedPaper = {
+      questions: paper,
+      seed,
+      generatedAt: new Date(),
+      fileName: defaultGeneratedPaperFileName(),
+    };
     renderPaper(paper, seed);
     showSection("paper-section");
   } catch (err) {
@@ -1173,35 +1205,6 @@ async function onGenerateClick() {
     updateCreditPanel(state.examContext.credit);
   }
 
-  // Store for download
-  $("download-btn").dataset.paper = JSON.stringify(
-    {
-      meta: {
-        level: state.level,
-        subject: state.subject,
-        paperType: state.paperType,
-        ...(state.paperNumber !== null && { paper: state.paperNumber }),
-        count: paper.length,
-        seed: seed,
-        generatedAt: new Date().toISOString(),
-      },
-      questions: paper.map((q, i) => ({
-        index: i + 1,
-        sourcePdf: q.pdfUrl,
-        originalNumber: q.number,
-        pageRange: { startPage: q.startPage ?? 1, endPage: q.endPage ?? q.startPage ?? 1 },
-        topics: q.topics,
-        ...(q.crop && { crop: q.crop }),
-        ...(state.paperType === "mcq" && {
-          stem: q.stem,
-          options: q.options,
-        }),
-        text: q.text,
-      })),
-    },
-    null,
-    2
-  );
 }
 
 // ─── Step 7: Render paper ─────────────────────────────────────────────────────
@@ -1452,7 +1455,7 @@ function renderPaper(paper, seed) {
 
     div.innerHTML = `
       <div class="question-header">
-        <span class="question-number">Q${i + 1}</span>
+        <span class="question-number">Question ${i + 1}</span>
         <span class="question-topics">${topicBadges}</span>
         <span class="question-source" title="${q.pdfUrl}">${q.pdfUrl.split("/").pop()} — ${pageLabel}</span>
       </div>
@@ -1721,20 +1724,364 @@ async function renderPdfCrop(container, pdfUrl, crop) {
 
 // ─── Step 8: Download JSON ────────────────────────────────────────────────────
 
-function onDownloadClick() {
-  const btn = $("download-btn");
-  const data = btn.dataset.paper;
-  if (!data) return;
+// Preview, download, and classroom upload all reuse the same generated PDF.
+function defaultGeneratedPaperFileName() {
+  const subject = formatSubjectLabel(state.subject || "Subject").replace(/[\\/:*?"<>|]+/g, "-");
+  return `${subject} Generated Paper ${new Date().toISOString().slice(0, 10)}.pdf`;
+}
 
-  const blob = new Blob([data], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `generated-paper-${Date.now()}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+async function ensureGeneratedPdf() {
+  if (state.generatedPdf) return state.generatedPdf;
+  if (!state.generatedPaper) {
+    throw new Error("Generate a paper before using PDF actions.");
+  }
+  if (!window.jspdf?.jsPDF) {
+    throw new Error("The PDF creator could not be loaded. Check the internet connection and retry.");
+  }
+
+  state.generatedPdf = {
+    blob: await buildGeneratedPaperPdf(state.generatedPaper),
+    fileName: state.generatedPaper.fileName,
+  };
+  return state.generatedPdf;
+}
+
+async function buildGeneratedPaperPdf(generatedPaper) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "pt", format: "a4", compress: true });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 42;
+
+  doc.setFillColor(37, 99, 235);
+  doc.rect(0, 0, pageWidth, 16, "F");
+  doc.setTextColor(15, 23, 42);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(24);
+  doc.text("Generated Exam Paper", margin, 92);
+  doc.setFontSize(15);
+  doc.text(formatSubjectLabel(state.subject), margin, 126);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100, 116, 139);
+  doc.setFontSize(11);
+  doc.text([
+    state.level?.replace("-", " ").toUpperCase(),
+    state.paperNumber !== null ? `Paper ${state.paperNumber}` : null,
+    `${generatedPaper.questions.length} questions`,
+    `Prepared ${generatedPaper.generatedAt.toLocaleString()}`,
+  ].filter(Boolean), margin, 158);
+  doc.setDrawColor(203, 213, 225);
+  doc.line(margin, 228, pageWidth - margin, 228);
+  doc.setTextColor(15, 23, 42);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.text("Instructions", margin, 262);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10.5);
+  doc.text(doc.splitTextToSize(
+    "Answer all questions. Generated question numbers define the order of this paper; original past-paper numbering may remain visible inside each extract.",
+    pageWidth - margin * 2
+  ), margin, 284);
+  addPdfFooter(doc, pageWidth, pageHeight);
+
+  if (state.paperType === "mcq") {
+    addMcqQuestionsToPdf(doc, generatedPaper.questions, pageWidth, pageHeight, margin);
+  } else {
+    for (let index = 0; index < generatedPaper.questions.length; index += 1) {
+      const canvases = await renderQuestionToCanvases(generatedPaper.questions[index]);
+      if (canvases.length === 0) {
+        throw new Error(`Question ${index + 1} could not be rendered into the PDF.`);
+      }
+      canvases.forEach((canvas, pageIndex) => {
+        doc.addPage();
+        addQuestionHeading(doc, index + 1, pageIndex > 0, pageWidth);
+        const availableWidth = pageWidth - margin * 2;
+        const availableHeight = pageHeight - 120;
+        const scale = Math.min(availableWidth / canvas.width, availableHeight / canvas.height);
+        const width = canvas.width * scale;
+        const height = canvas.height * scale;
+        doc.addImage(
+          canvas.toDataURL("image/jpeg", 0.9),
+          "JPEG",
+          (pageWidth - width) / 2,
+          76,
+          width,
+          height,
+          undefined,
+          "FAST"
+        );
+        addPdfFooter(doc, pageWidth, pageHeight);
+      });
+    }
+  }
+  return doc.output("blob");
+}
+
+function addQuestionHeading(doc, questionNumber, continued, pageWidth) {
+  doc.setTextColor(15, 23, 42);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text(`Question ${questionNumber}${continued ? " (continued)" : ""}`, 42, 44);
+  doc.setDrawColor(37, 99, 235);
+  doc.setLineWidth(1.2);
+  doc.line(42, 55, pageWidth - 42, 55);
+}
+
+function addPdfFooter(doc, pageWidth, pageHeight) {
+  doc.setTextColor(100, 116, 139);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.text("Generated with TutorsAtWork Exam AI", 42, pageHeight - 22);
+  doc.text(String(doc.getNumberOfPages()), pageWidth - 42, pageHeight - 22, { align: "right" });
+}
+
+function addMcqQuestionsToPdf(doc, questions, pageWidth, pageHeight, margin) {
+  let y = pageHeight;
+  questions.forEach((question, index) => {
+    const options = question.options || {};
+    const wrapped = [
+      question.stem || "",
+      `A. ${options.A || ""}`,
+      `B. ${options.B || ""}`,
+      `C. ${options.C || ""}`,
+      `D. ${options.D || ""}`,
+    ].map((line) => doc.splitTextToSize(line, pageWidth - margin * 2));
+    const requiredHeight = 46 + wrapped.reduce((total, lines) => total + lines.length * 13 + 5, 0);
+    if (y + requiredHeight > pageHeight - 46) {
+      doc.addPage();
+      y = 44;
+    }
+    doc.setTextColor(15, 23, 42);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.text(`Question ${index + 1}`, margin, y);
+    y += 22;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    wrapped.forEach((lines) => {
+      doc.text(lines, margin, y);
+      y += lines.length * 13 + 5;
+    });
+    doc.setDrawColor(219, 227, 239);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 24;
+    addPdfFooter(doc, pageWidth, pageHeight);
+  });
+}
+
+async function renderQuestionToCanvases(question) {
+  const startPage = question.startPage ?? question.page ?? 1;
+  const endPage = question.endPage ?? startPage;
+  if (question.crop?.cropped && startPage === endPage) {
+    return [await renderCropCanvas(question.pdfUrl, question.crop)];
+  }
+
+  const canvases = [];
+  const blankPages = new Set(question.blankPages ?? []);
+  for (let pageNumber = startPage; pageNumber <= endPage; pageNumber += 1) {
+    if (!blankPages.has(pageNumber)) {
+      canvases.push(await renderMaskedPageCanvas(question.pdfUrl, pageNumber));
+    }
+  }
+  return canvases;
+}
+
+async function renderMaskedPageCanvas(pdfUrl, pageNumber) {
+  const pdfDoc = await getCachedPdfDoc(pdfUrl);
+  const page = await pdfDoc.getPage(pageNumber);
+  const viewport = page.getViewport({ scale: 1.5 });
+  const canvas = document.createElement("canvas");
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext("2d");
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  ctx.fillStyle = PDF_MASK_COLOR;
+  ctx.fillRect(0, 0, canvas.width, PDF_HEADER_MASK_PX);
+  ctx.fillRect(0, canvas.height - PDF_FOOTER_MASK_PX, canvas.width, PDF_FOOTER_MASK_PX);
+  return canvas;
+}
+
+async function renderCropCanvas(pdfUrl, crop) {
+  const pdfDoc = await getCachedPdfDoc(pdfUrl);
+  const page = await pdfDoc.getPage(crop.page ?? 1);
+  const scale = 1.5;
+  const viewport = page.getViewport({ scale });
+  const sourceCanvas = document.createElement("canvas");
+  sourceCanvas.width = viewport.width;
+  sourceCanvas.height = viewport.height;
+  const sourceCtx = sourceCanvas.getContext("2d");
+  await page.render({ canvasContext: sourceCtx, viewport }).promise;
+  const topPdfY = Math.min(viewport.height / scale, (crop.startY ?? 0) + 28);
+  const bottomPdfY = crop.nextStartY != null
+    ? Math.max(0, crop.nextStartY + 10)
+    : PDF_FOOTER_MASK_PX / scale;
+  const cropTop = Math.max(0, Math.floor(viewport.height - topPdfY * scale));
+  const cropBottom = Math.min(
+    viewport.height,
+    Math.max(cropTop + 80, Math.ceil(viewport.height - bottomPdfY * scale))
+  );
+  const canvas = document.createElement("canvas");
+  canvas.width = viewport.width;
+  canvas.height = cropBottom - cropTop;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = PDF_MASK_COLOR;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(sourceCanvas, 0, cropTop, viewport.width, canvas.height, 0, 0, viewport.width, canvas.height);
+  return canvas;
+}
+
+async function onPreviewClick() {
+  setLoading("preview-btn", true);
+  setPaperActionStatus("Preparing PDF preview...");
+  try {
+    const pdf = await ensureGeneratedPdf();
+    await renderGeneratedPdfPreview(pdf.blob);
+    $("paper-preview-dialog").showModal();
+    setPaperActionStatus("");
+  } catch (error) {
+    setPaperActionStatus(error.message || "Could not prepare PDF preview.", "error");
+  } finally {
+    setLoading("preview-btn", false);
+  }
+}
+
+async function renderGeneratedPdfPreview(blob) {
+  const container = $("paper-preview-pages");
+  container.innerHTML = '<span class="page-loading">Rendering PDF preview...</span>';
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const pdfDoc = await window.pdfjsLib.getDocument({ data: bytes, verbosity: 0 }).promise;
+  container.replaceChildren();
+  for (let pageNumber = 1; pageNumber <= pdfDoc.numPages; pageNumber += 1) {
+    const page = await pdfDoc.getPage(pageNumber);
+    const viewport = page.getViewport({ scale: 1.35 });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+    container.appendChild(canvas);
+  }
+}
+
+async function onDownloadClick() {
+  setLoading("download-btn", true);
+  setPaperActionStatus("Preparing PDF download...");
+  try {
+    const pdf = await ensureGeneratedPdf();
+    const file = new File([pdf.blob], pdf.fileName, { type: "application/pdf" });
+    if (/Android/i.test(navigator.userAgent) && navigator.canShare?.({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title: pdf.fileName,
+      });
+      setPaperActionStatus("PDF opened in the device save/share menu.", "success");
+      return;
+    }
+
+    const url = URL.createObjectURL(pdf.blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = pdf.fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setPaperActionStatus("PDF downloaded.", "success");
+  } catch (error) {
+    setPaperActionStatus(error.message || "Could not download the PDF.", "error");
+  } finally {
+    setLoading("download-btn", false);
+  }
+}
+
+async function onUploadClassroomClick() {
+  setLoading("upload-classroom-btn", true);
+  setPaperActionStatus("Loading your classrooms...");
+  try {
+    const [pdf, classrooms] = await Promise.all([
+      ensureGeneratedPdf(),
+      loadTutorClassrooms(state.examContext),
+    ]);
+    if (classrooms.length === 0) {
+      throw new Error("No classrooms created by this tutor were found.");
+    }
+    renderClassroomPicker(classrooms);
+    $("classroom-upload-name").value = pdf.fileName;
+    setClassroomUploadStatus("");
+    $("classroom-upload-dialog").showModal();
+    setPaperActionStatus("");
+  } catch (error) {
+    setPaperActionStatus(error.message || "Could not load classrooms.", "error");
+  } finally {
+    setLoading("upload-classroom-btn", false);
+  }
+}
+
+function renderClassroomPicker(classrooms) {
+  const list = $("classroom-upload-list");
+  list.replaceChildren();
+  classrooms.forEach((classroom, index) => {
+    const label = document.createElement("label");
+    label.className = "classroom-option";
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "upload-classroom";
+    radio.value = String(classroom.id);
+    radio.checked = index === 0;
+    const text = document.createElement("span");
+    const title = document.createElement("strong");
+    title.textContent = classroom.title;
+    const detail = document.createElement("small");
+    detail.textContent = `Classroom ${classroom.id}`;
+    text.append(title, detail);
+    label.append(radio, text);
+    list.appendChild(label);
+  });
+}
+
+function setClassroomUploadStatus(message, type = "info") {
+  const status = $("classroom-upload-status");
+  status.textContent = message;
+  status.className = `status status--${type}`;
+  status.hidden = !message;
+}
+
+async function onClassroomUploadSubmit(event) {
+  event.preventDefault();
+  if (event.submitter?.value === "cancel") {
+    $("classroom-upload-dialog").close();
+    return;
+  }
+  const classroomId = document.querySelector('input[name="upload-classroom"]:checked')?.value;
+  const fileName = $("classroom-upload-name").value.trim();
+  if (!classroomId || !fileName) {
+    setClassroomUploadStatus("Choose a classroom and enter a PDF name.", "warn");
+    return;
+  }
+
+  const confirm = $("classroom-upload-confirm");
+  confirm.disabled = true;
+  setClassroomUploadStatus("Uploading PDF to classroom notes...");
+  try {
+    const pdf = await ensureGeneratedPdf();
+    const result = await uploadGeneratedPaperToClassroom(state.examContext, {
+      classroomId: Number(classroomId),
+      fileName,
+      pdfBlob: pdf.blob,
+    });
+    state.generatedPaper.fileName = result.fileName;
+    state.generatedPdf.fileName = result.fileName;
+    $("classroom-upload-dialog").close();
+    setPaperActionStatus(`Uploaded to ${result.classroom.title} notes.`, "success");
+  } catch (error) {
+    setClassroomUploadStatus(error.message || "Could not upload the PDF.", "error");
+  } finally {
+    confirm.disabled = false;
+  }
+}
+
+function closePaperPreview() {
+  $("paper-preview-dialog").close();
+  $("paper-preview-pages").replaceChildren();
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
@@ -1811,7 +2158,15 @@ function init() {
   $("generate-btn").addEventListener("click", onGenerateClick);
 
   // Download
+  $("preview-btn").addEventListener("click", onPreviewClick);
   $("download-btn").addEventListener("click", onDownloadClick);
+  $("upload-classroom-btn").addEventListener("click", onUploadClassroomClick);
+  $("paper-preview-close").addEventListener("click", closePaperPreview);
+  $("paper-preview-dialog").addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closePaperPreview();
+  });
+  $("classroom-upload-form").addEventListener("submit", onClassroomUploadSubmit);
 
   // Hide all downstream sections at start
   [

@@ -1,4 +1,5 @@
 const DATABASE_URL = "https://houseoftutors-f398e-default-rtdb.firebaseio.com";
+const STORAGE_BUCKET = "houseoftutors-f398e.firebasestorage.app";
 const DEFAULT_PLAN = "BASIC";
 
 const DEFAULT_CONFIG = {
@@ -111,6 +112,91 @@ export async function consumeExamAiCredit(context) {
   }
 
   throw new Error("Credit update was busy. Please try Generate again.");
+}
+
+export async function loadTutorClassrooms(context) {
+  const adminPath = `ADMIN/${context.adminKey}`;
+  const [adminData, classroomsData] = await Promise.all([
+    firebaseGet(adminPath),
+    firebaseGet("CLASSROOMS"),
+  ]);
+  const roomIds = new Set(parseCsv(adminData?.VIRTUAL_ROOMS).map(Number).filter(Number.isInteger));
+  const classrooms = classroomsData && typeof classroomsData === "object"
+    ? Object.values(classroomsData)
+    : [];
+
+  return classrooms
+    .filter((classroom) => classroom && typeof classroom === "object")
+    .map((classroom) => ({
+      id: numberOr(classroom.CLASSROOM_ID, 0),
+      title: cleanText(classroom.TITLE) || "Untitled classroom",
+      storageFolder: cleanText(classroom.STORAGE_FOLDER),
+    }))
+    .filter((classroom) => roomIds.has(classroom.id) && classroom.storageFolder)
+    .sort((left, right) => left.title.localeCompare(right.title));
+}
+
+export async function uploadGeneratedPaperToClassroom(context, {
+  classroomId,
+  fileName,
+  pdfBlob,
+}) {
+  if (!(pdfBlob instanceof Blob) || pdfBlob.size === 0) {
+    throw new Error("The generated PDF is empty.");
+  }
+
+  const classrooms = await loadTutorClassrooms(context);
+  const classroom = classrooms.find((item) => item.id === Number(classroomId));
+  if (!classroom) {
+    throw new Error("This classroom is not available to the current tutor.");
+  }
+
+  const safeFileName = ensurePdfFileName(fileName);
+  const noteId = await nextNoteId(classroom);
+  const objectPath = `${classroom.storageFolder}/${noteId}`;
+  const downloadToken = createDownloadToken();
+  let uploaded = false;
+  let noteWritten = false;
+
+  try {
+    const downloadUrl = await uploadStorageObject({
+      objectPath,
+      blob: pdfBlob,
+      fileName: safeFileName,
+      downloadToken,
+    });
+    uploaded = true;
+
+    const now = new Date();
+    await firebaseSet(`${classroom.storageFolder}/${noteId}`, {
+      Name: safeFileName,
+      ID: noteId,
+      Link: downloadUrl,
+      Time: now.getTime(),
+    });
+    noteWritten = true;
+    await firebaseSet(`NUMBERS/ID_CLASSROOM_${classroom.id}_NOTES/NUMBER`, noteId);
+    await firebaseSet(`ADMIN/${context.adminKey}/LOGS/LAST_UPLOAD_NOTES`, {
+      CLASSROOM_ID: String(classroom.id),
+      TIMESTAMP: now.getTime(),
+      DATE: now.toISOString(),
+    });
+
+    return {
+      classroom,
+      noteId,
+      fileName: safeFileName,
+      downloadUrl,
+    };
+  } catch (error) {
+    if (noteWritten) {
+      await firebaseRemove(`${classroom.storageFolder}/${noteId}`).catch(() => {});
+    }
+    if (uploaded) {
+      await removeStorageObject(objectPath).catch(() => {});
+    }
+    throw error;
+  }
 }
 
 async function loadConfig() {
@@ -285,6 +371,77 @@ function parseCsv(value) {
     .split(",")
     .map((part) => part.trim())
     .filter(Boolean);
+}
+
+async function nextNoteId(classroom) {
+  const counterPath = `NUMBERS/ID_CLASSROOM_${classroom.id}_NOTES/NUMBER`;
+  const counter = Number(await firebaseGet(counterPath));
+  if (Number.isFinite(counter)) {
+    return counter + 1;
+  }
+
+  const notes = await firebaseGet(classroom.storageFolder);
+  const ids = notes && typeof notes === "object"
+    ? Object.values(notes)
+        .map((note) => Number(note?.ID))
+        .filter(Number.isFinite)
+    : [];
+  return ids.length > 0 ? Math.max(...ids) + 1 : 2;
+}
+
+async function uploadStorageObject({ objectPath, blob, fileName, downloadToken }) {
+  const headerFileName = fileName.replace(/[^\x20-\x7E]/g, "").replace(/"/g, "") || "Generated Exam Paper.pdf";
+  const response = await fetch(storageUploadUri(objectPath), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `inline; filename="${headerFileName}"`,
+      "x-goog-meta-firebaseStorageDownloadTokens": downloadToken,
+    },
+    body: blob,
+  });
+  ensureSuccess(response, `upload ${objectPath}`);
+  return storageDownloadUrl(objectPath, downloadToken);
+}
+
+async function removeStorageObject(objectPath) {
+  const response = await fetch(storageObjectUri(objectPath), { method: "DELETE" });
+  if (response.status !== 404) {
+    ensureSuccess(response, `delete ${objectPath}`);
+  }
+}
+
+function storageUploadUri(objectPath) {
+  const url = new URL(`https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o`);
+  url.searchParams.set("uploadType", "media");
+  url.searchParams.set("name", objectPath);
+  return url.toString();
+}
+
+function storageObjectUri(objectPath) {
+  return `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o/${encodeURIComponent(objectPath)}`;
+}
+
+function storageDownloadUrl(objectPath, token) {
+  return `${storageObjectUri(objectPath)}?alt=media&token=${encodeURIComponent(token)}`;
+}
+
+function createDownloadToken() {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  return [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+function ensurePdfFileName(value) {
+  const cleaned = cleanText(value)
+    .replace(/[\\/:*?"<>|]+/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+  const name = cleaned || "Generated Exam Paper";
+  return name.toLowerCase().endsWith(".pdf") ? name : `${name}.pdf`;
 }
 
 function normalizeSubject(value) {

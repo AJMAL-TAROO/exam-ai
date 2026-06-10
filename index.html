@@ -15,6 +15,7 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = window.pdfjsWorkerSrc;
     window.pdfjsLib = pdfjsLib;
   </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <link rel="stylesheet" href="./styles.css" />
   <script type="module" src="./app.js"></script>
@@ -247,13 +248,62 @@
           <span class="step-badge">8</span>
           <div>
             <h2>Generated Paper</h2>
-            <p>Review the generated paper and export the JSON if needed.</p>
+            <p>Review, preview, download, or share the finished PDF with a classroom.</p>
           </div>
         </div>
-        <button class="btn btn-success" id="download-btn">Download JSON</button>
+        <div class="paper-actions">
+          <button class="btn btn-secondary" id="preview-btn" data-loading-text="Preparing preview...">
+            Preview PDF
+          </button>
+          <button class="btn btn-secondary" id="download-btn" data-loading-text="Preparing PDF...">
+            Download PDF
+          </button>
+          <button class="btn btn-success" id="upload-classroom-btn" data-loading-text="Loading classrooms...">
+            Upload to classroom
+          </button>
+        </div>
       </div>
+      <div id="paper-action-status" class="status status--info" hidden></div>
       <div id="paper-container"></div>
     </section>
   </main>
+
+  <dialog class="paper-dialog paper-dialog--preview" id="paper-preview-dialog">
+    <div class="dialog-header">
+      <div>
+        <h2>Paper Preview</h2>
+        <p>Exactly as the PDF will download or appear in classroom notes.</p>
+      </div>
+      <button class="dialog-close" id="paper-preview-close" type="button" aria-label="Close preview">&times;</button>
+    </div>
+    <div id="paper-preview-pages" aria-label="Generated paper PDF preview"></div>
+  </dialog>
+
+  <dialog class="paper-dialog" id="classroom-upload-dialog">
+    <form method="dialog" id="classroom-upload-form">
+      <div class="dialog-header">
+        <div>
+          <h2>Upload to Classroom</h2>
+          <p>The paper will appear as a normal PDF in the selected classroom notes.</p>
+        </div>
+        <button class="dialog-close" value="cancel" type="submit" aria-label="Close upload dialog">&times;</button>
+      </div>
+      <label>
+        <span>PDF name</span>
+        <input id="classroom-upload-name" type="text" maxlength="120" required />
+      </label>
+      <fieldset class="classroom-picker">
+        <legend>Select one of your classrooms</legend>
+        <div id="classroom-upload-list"></div>
+      </fieldset>
+      <div id="classroom-upload-status" class="status status--info" hidden></div>
+      <div class="dialog-actions">
+        <button class="btn btn-secondary" value="cancel" type="submit">Cancel</button>
+        <button class="btn btn-success" id="classroom-upload-confirm" value="default" type="submit">
+          Upload PDF
+        </button>
+      </div>
+    </form>
+  </dialog>
 </body>
 </html>
