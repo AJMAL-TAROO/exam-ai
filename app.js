@@ -53,6 +53,7 @@ const state = {
 const MAX_PREVIEW_LENGTH = 120;
 const DEBUG_CLICK_TARGET = 5;
 const DEBUG_CLICK_WINDOW_MS = 3000;
+const nativeRequests = new Map();
 
 const SUBJECT_LABELS = {
   maths: "Mathematics",
@@ -79,6 +80,53 @@ const PAPER_1_MCQ_SUBJECTS = new Set([
 // ─── DOM refs ─────────────────────────────────────────────────────────────────
 
 const $ = (id) => document.getElementById(id);
+
+window.tawNativeResult = (result) => {
+  const request = nativeRequests.get(result?.requestId);
+  if (!request) return;
+  nativeRequests.delete(result.requestId);
+  if (result.ok) {
+    request.resolve(result);
+  } else {
+    request.reject(new Error(result.message || "TAW could not complete the action."));
+  }
+};
+
+function hasTawNativeBridge() {
+  return Boolean(window.chrome?.webview?.postMessage || window.TawNativeBridge?.postMessage);
+}
+
+async function sendPdfToTaw(action, pdf, extra = {}) {
+  if (!hasTawNativeBridge()) {
+    throw new Error("Open Exam AI inside the TAW app to use this action.");
+  }
+  const requestId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+  const payload = {
+    action,
+    requestId,
+    fileName: pdf.fileName,
+    pdfBase64: await blobToBase64(pdf.blob),
+    ...extra,
+  };
+
+  return new Promise((resolve, reject) => {
+    nativeRequests.set(requestId, { resolve, reject });
+    if (window.chrome?.webview?.postMessage) {
+      window.chrome.webview.postMessage(payload);
+    } else {
+      window.TawNativeBridge.postMessage(JSON.stringify(payload));
+    }
+  });
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not prepare the PDF for TAW."));
+    reader.onload = () => resolve(String(reader.result).split(",", 2)[1] || "");
+    reader.readAsDataURL(blob);
+  });
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1967,6 +2015,12 @@ async function onDownloadClick() {
   setPaperActionStatus("Preparing PDF download...");
   try {
     const pdf = await ensureGeneratedPdf();
+    if (hasTawNativeBridge()) {
+      const result = await sendPdfToTaw("downloadPdf", pdf);
+      setPaperActionStatus(result.message || "PDF saved.", "success");
+      return;
+    }
+
     const file = new File([pdf.blob], pdf.fileName, { type: "application/pdf" });
     if (/Android/i.test(navigator.userAgent) && navigator.canShare?.({ files: [file] })) {
       await navigator.share({
@@ -2063,15 +2117,22 @@ async function onClassroomUploadSubmit(event) {
   setClassroomUploadStatus("Uploading PDF to classroom notes...");
   try {
     const pdf = await ensureGeneratedPdf();
-    const result = await uploadGeneratedPaperToClassroom(state.examContext, {
-      classroomId: Number(classroomId),
-      fileName,
-      pdfBlob: pdf.blob,
-    });
+    const result = hasTawNativeBridge()
+      ? await sendPdfToTaw("uploadPdf", { ...pdf, fileName }, {
+          classroomId: Number(classroomId),
+        })
+      : await uploadGeneratedPaperToClassroom(state.examContext, {
+          classroomId: Number(classroomId),
+          fileName,
+          pdfBlob: pdf.blob,
+        });
     state.generatedPaper.fileName = result.fileName;
     state.generatedPdf.fileName = result.fileName;
     $("classroom-upload-dialog").close();
-    setPaperActionStatus(`Uploaded to ${result.classroom.title} notes.`, "success");
+    setPaperActionStatus(
+      result.message || `Uploaded to ${result.classroom.title} notes.`,
+      "success"
+    );
   } catch (error) {
     setClassroomUploadStatus(error.message || "Could not upload the PDF.", "error");
   } finally {
