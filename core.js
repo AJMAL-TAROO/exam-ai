@@ -1,7 +1,7 @@
 /**
  * core.js — PDF processing, question extraction, topic tagging, paper generation.
  *
- * Depends on PDF.js loaded globally as `pdfjsLib` (ESM via CDN).
+ * Depends on PDF.js loaded globally as `pdfjsLib`.
  */
 
 import { augmentWithHybridScores } from "./topicScorer.js";
@@ -14,6 +14,9 @@ import { augmentWithHybridScores } from "./topicScorer.js";
  * @returns {Promise<PDFDocumentProxy>}
  */
 export async function loadPdf(url) {
+  if (!globalThis.pdfjsLib?.getDocument) {
+    throw new Error("PDF.js did not load in this browser.");
+  }
   const loadingTask = pdfjsLib.getDocument({ url, verbosity: 0 });
   return loadingTask.promise;
 }
@@ -1749,7 +1752,7 @@ function assignedTopicsFromScores(topicScores) {
  * @param {(done: number, total: number, url: string) => void} [onProgress]
  * @returns {Promise<QuestionEntry[]>}
  */
-export async function buildIndex(pdfUrls, topics, onProgress) {
+export async function buildIndex(pdfUrls, topics, onProgress, onFailure) {
   const index = [];
   // Deduplicate URLs so the same PDF is never processed twice even if it
   // appears more than once in the manifest or matched-URL list.
@@ -1837,6 +1840,7 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
       }
     } catch (err) {
       console.warn(`Failed to process ${url}:`, err);
+      if (onFailure) onFailure(err, url);
     }
   }
   if (onProgress) onProgress(uniqueUrls.length, uniqueUrls.length, "");
@@ -1851,7 +1855,7 @@ export async function buildIndex(pdfUrls, topics, onProgress) {
  * @param {(done: number, total: number, url: string) => void} [onProgress]
  * @returns {Promise<QuestionEntry[]>}
  */
-export async function buildMcqIndex(pdfUrls, topics, onProgress) {
+export async function buildMcqIndex(pdfUrls, topics, onProgress, onFailure) {
   const index = [];
   const uniqueUrls = [...new Set(pdfUrls)];
   const seenKeys = new Set();
@@ -1916,6 +1920,7 @@ export async function buildMcqIndex(pdfUrls, topics, onProgress) {
       }
     } catch (err) {
       console.warn(`Failed to process ${url}:`, err);
+      if (onFailure) onFailure(err, url);
     }
   }
 

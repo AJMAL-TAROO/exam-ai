@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PDF.js browser smoke test</title>
+  <script>
+    if (new URLSearchParams(location.search).has("disableWorker")) {
+      Object.defineProperty(window, "Worker", { value: undefined });
+    }
+  </script>
+  <script src="../vendor/pdfjs/pdf.min.js"></script>
+</head>
+<body data-result="pending">
+  <script type="module">
+    try {
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "../vendor/pdfjs/pdf.worker.min.js";
+      const pdf = await pdfjsLib.getDocument({
+        url: "../assets/a-level/computer-science/question-papers/paper-4/9618_w22_qp_42.pdf",
+        verbosity: 0,
+      }).promise;
+      const page = await pdf.getPage(1);
+      const text = await page.getTextContent();
+      document.body.dataset.result = text.items.length > 0 ? "passed" : "failed";
+      document.body.textContent = `pages=${pdf.numPages} textItems=${text.items.length}`;
+      await pdf.destroy();
+    } catch (error) {
+      document.body.dataset.result = "failed";
+      document.body.textContent = error.message;
+    }
+  </script>
+</body>
+</html>

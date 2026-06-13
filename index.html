@@ -5,15 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Exam AI - TAW</title>
 
+  <script src="./vendor/pdfjs/pdf.min.js"></script>
   <script>
-    window.pdfjsWorkerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.mjs";
-  </script>
-  <script type="module">
-    import * as pdfjsLib from
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.min.mjs";
-    pdfjsLib.GlobalWorkerOptions.workerSrc = window.pdfjsWorkerSrc;
-    window.pdfjsLib = pdfjsLib;
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      new URL("./vendor/pdfjs/pdf.worker.min.js", window.location.href).href;
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 

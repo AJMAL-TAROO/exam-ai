@@ -2,7 +2,7 @@
  * app.js — UI state machine, event handlers, orchestration.
  *
  * Imports core.js and subjects/* for all processing logic.
- * PDF.js is expected on window.pdfjsLib (loaded via CDN in index.html).
+ * PDF.js is expected on window.pdfjsLib (self-hosted and loaded in index.html).
  */
 
 import {
@@ -882,6 +882,7 @@ async function onBuildIndexClick() {
 
   state.topics = getTopics();
   state.questionIndex = [];
+  const indexingFailures = [];
 
   try {
     const buildFn = state.paperType === "mcq" ? buildMcqIndex : buildIndex;
@@ -891,11 +892,25 @@ async function onBuildIndexClick() {
       (done, total, url) => {
         const name = url ? url.split("/").pop() : "";
         setStatus("index", `Indexing… ${done}/${total}${name ? ` — ${name}` : ""}`);
+      },
+      (error, url) => {
+        indexingFailures.push({
+          url,
+          message: error?.message || String(error),
+        });
       }
     );
 
     if (state.questionIndex.length === 0) {
-      setStatus("index", "No questions found. PDFs may not be text-based or the selected paper type may not match the source format.", "warn");
+      if (state.debugMode && indexingFailures.length > 0) {
+        setStatus(
+          "index",
+          `Could not process ${indexingFailures.length}/${state.selectedPdfUrls.length} PDF(s). First error: ${indexingFailures[0].message}`,
+          "error"
+        );
+      } else {
+        setStatus("index", "No questions found. PDFs may not be text-based or the selected paper type may not match the source format.", "warn");
+      }
     } else {
       setStatus(
         "index",
